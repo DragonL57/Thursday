@@ -11,7 +11,9 @@ import pickle
 from litellm.exceptions import RateLimitError
 
 from colorama import Fore, Style
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
+from rich.padding import Padding
 from rich.markdown import Markdown
 import config as conf
 
@@ -50,19 +52,60 @@ class Assistant:
             self.messages.append({"role": "system", "content": system_instruction})
 
         self.console = Console()
+        self.border_width = 100
 
     def send_message(self, message):
         self.messages.append({"role": "user", "content": message})
         response = self.get_completion()
         return self.__process_response(response)
 
+    def wrap_text(self, text, width):
+        """Custom text wrapper that preserves bullet points and indentation."""
+        lines = []
+        for line in text.split('\n'):
+            # Detect bullet points or numbered lists
+            is_bullet = line.lstrip().startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.'))
+            indent = len(line) - len(line.lstrip())
+            
+            # If it's a bullet point, reduce available width by indentation
+            if is_bullet:
+                available_width = width - indent - 2  # -2 for some padding
+            else:
+                available_width = width
+            
+            # Wrap this line
+            if len(line) > width:
+                # Split into words
+                words = line.split()
+                current_line = []
+                current_length = indent
+                
+                for word in words:
+                    if current_length + len(word) + 1 <= available_width:
+                        current_line.append(word)
+                        current_length += len(word) + 1
+                    else:
+                        # Add the current line with proper indentation
+                        if current_line:
+                            lines.append(' ' * indent + ' '.join(current_line))
+                        current_line = [word]
+                        current_length = indent + len(word)
+                
+                if current_line:
+                    lines.append(' ' * indent + ' '.join(current_line))
+            else:
+                lines.append(line)
+        
+        return lines
+
     def print_ai(self, msg: str):
-        print(f"{Fore.YELLOW}┌{'─' * 58}┐{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}│ {Fore.GREEN}{self.name}:{Style.RESET_ALL} ", end="")
-        self.console.print(
-            Markdown(msg.strip() if msg else ""), end="", soft_wrap=True, no_wrap=False
-        )
-        print(f"{Fore.YELLOW}└{'─' * 58}┘{Style.RESET_ALL}")
+        formatted_msg = msg.strip() if msg else ""
+        
+        # Print the box
+        print(f"{Fore.YELLOW}┌{'─' * self.border_width}┐{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}│{Style.RESET_ALL} {Fore.GREEN}{self.name}:{Style.RESET_ALL}")
+        self.console.print(Markdown(formatted_msg))
+        print(f"{Fore.YELLOW}└{'─' * self.border_width}┘{Style.RESET_ALL}")
 
     def get_completion(self):
         """Get a completion from the model with the current messages and tools."""
@@ -353,11 +396,12 @@ if __name__ == "__main__":
     gem.print_header(f"{conf.NAME} CHAT INTERFACE")
     while True:
         try:
-            print(f"{Fore.CYAN}┌{'─' * 58}┐{Style.RESET_ALL}")
+            border_width = 100
+            print(f"{Fore.CYAN}┌{'─' * border_width}┐{Style.RESET_ALL}")
             # msg = input("f{Fore.CYAN}│ {Fore.MAGENTA}You:{Style.RESET_ALL} ")
             # msg = session.prompt()
             msg = session.prompt(prompt_text)
-            print(f"{Fore.CYAN}└{'─' * 58}┘{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}└{'─' * border_width}┘{Style.RESET_ALL}")
 
             if not msg:
                 continue
