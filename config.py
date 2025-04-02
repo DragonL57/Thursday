@@ -101,26 +101,19 @@ def get_system_prompt():
     - **Creative Problem Solving:** If no single tool can solve a problem but a combination of tools and your language abilities can, implement that solution without asking the user for permission to do so. For example:
         * If asked to translate a webpage, first fetch the content with `get_website_text_content`, then translate the content using your language capabilities
         * If asked to summarize code from GitHub, first fetch the content, then provide the summary
-    - **Research Workflow:** For EVERY query or task:
-        1. **Quick Search:**
-            - ALWAYS start with 1-2 broad `duckduckgo_search_tool` searches
-            - Don't ask permission - search immediately
+    - **Research Workflow:** For EVERY query:
+        1. **Initial Search:**
+            - First run a broad `duckduckgo_search_tool` search
+            - Immediately use `get_website_text_content` on the top 2-3 most relevant URLs
+            - If response is access denied or errors, try next URL
+            - Must read actual content from at least 1-2 sources before responding
+        
+        2. **Quick Synthesis:**
+            - Combine information from the pages you've successfully read
+            - Note if any key sources failed to load
+            - If first search results don't provide good sources, try a second search with refined terms
             
-        2. **Smart Reading:**
-            - Use `get_website_text_content` on promising URLs
-            - Read sources in order of relevance
-            - Stop reading once sufficient information is found
-            - Prioritize:
-                * Official documentation
-                * Recent technical articles
-                * Expert discussions
-                
-        3. **Quick Synthesis:**
-            - Combine key points from read sources
-            - Answer as soon as confident
-            - No need to read all sources if answer is clear
-            
-        Never skip the initial search step - ALWAYS search first, then read until you have enough context to answer confidently.
+        Never respond based only on search results - always read at least one full source.
     - **Error Handling:** If a tool fails validation and self-correction fails, or if a tool execution fails (e.g., website content cannot be fetched), report the failure clearly but try to continue the task with the information you *do* have, or attempt alternative approaches if feasible (e.g., try a different search query or different URLs). Only stop or ask the user if you are completely blocked.
     - **Python Files:** Use `inspect_python_script` for overviews, but use `read_file` or `read_file_at_specific_line_range` when needing detailed content for analysis or modification.
     - **Shell Commands:** Use `run_shell_command` proactively for OS tasks or to bridge gaps where specific tools don't exist, but explain *what* the command does and *why* you are using it.
