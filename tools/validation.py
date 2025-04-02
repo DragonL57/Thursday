@@ -6,7 +6,10 @@ from typing import Dict, Optional, Tuple
 
 # Define known tools and their required/optional parameters
 KNOWN_TOOLS = {
-    "duckduckgo_search_tool": {"required": ["query"], "optional": []},
+    "duckduckgo_search_tool": {
+        "required": ["query"], 
+        "optional": ["max_results", "region", "time_filter", "safe_search"]
+    },
     "list_dir": {"required": ["path", "recursive", "files_only", "dirs_only"], "optional": []},
     "get_drives": {"required": [], "optional": []},
     "get_directory_size": {"required": ["path"], "optional": []},
@@ -21,8 +24,10 @@ KNOWN_TOOLS = {
     "rename_file": {"required": ["filepath", "new_filename"], "optional": []},
     "rename_directory": {"required": ["path", "new_dirname"], "optional": []},
     "find_files": {"required": ["pattern"], "optional": ["directory", "recursive", "include_hidden"]},
-    "get_website_text_content": {"required": ["url"], "optional": []},
-    "open_url": {"required": ["url"], "optional": []},
+    "get_website_text_content": {
+        "required": ["url"], 
+        "optional": ["timeout", "extract_mode"]
+    },
     "run_shell_command": {"required": ["command", "blocking"], "optional": ["print_output"]},
     "get_current_datetime": {"required": [], "optional": []},
     "evaluate_math_expression": {"required": ["expression"], "optional": []},

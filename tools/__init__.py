@@ -30,8 +30,7 @@ from .filesystem import (
 # Import all web functions
 from .web import (
     duckduckgo_search_tool,
-    get_website_text_content,
-    open_url
+    get_website_text_content
 )
 
 # Import all system functions
@@ -62,7 +61,6 @@ TOOLS = [
     # Web tools
     duckduckgo_search_tool,
     get_website_text_content,
-    open_url,
     
     # Filesystem tools
     get_current_directory,

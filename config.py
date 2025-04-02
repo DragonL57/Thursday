@@ -117,5 +117,11 @@ def get_system_prompt():
 # The max amount of results duckduckgo search tool can return
 MAX_DUCKDUCKGO_SEARCH_RESULTS: int = 4
 
-# Timeout
+# Default region for DuckDuckGo searches (None = automatic)
+DEFAULT_SEARCH_REGION: str = None 
+
+# Default timeout for web requests in seconds
+WEB_REQUEST_TIMEOUT: int = 30
+
+# Timeout for DuckDuckGo searches
 DUCKDUCKGO_TIMEOUT: int = 20
