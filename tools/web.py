@@ -6,52 +6,86 @@ import webbrowser
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
+from duckduckgo_search.exceptions import DuckDuckGoSearchException, RatelimitException, TimeoutException
 
 from .formatting import tool_message_print, tool_report_print
 import config as conf
+from urllib.parse import urlparse
 
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 
 def duckduckgo_search_tool(
     query: str, 
-    max_results: int = None, 
-    region: str = None,
-    time_filter: str = None,
+    max_results: int = 5, 
+    region: str = "default", 
+    time_filter: str = "all time", 
     safe_search: bool = True
-) -> list:
+):
     """
-    Searches DuckDuckGo for the given query and returns a list of results.
-
+    Perform a search using DuckDuckGo and return the results.
+    
     Args:
-        query: The search query.
-        max_results: Maximum number of results to return (defaults to config value).
-        region: Region code for localized results (e.g., 'us-en', 'uk-en', 'de-de').
-        time_filter: Time filter for results ('d' for day, 'w' for week, 'm' for month, 'y' for year).
-        safe_search: Whether to enable safe search filtering.
-
+        query (str): The search query
+        max_results (int): The maximum number of results to return
+        region (str): The region for the search (default to "wt-wt")
+        time_filter (str): Filter results by time ('day', 'week', 'month', 'year', or 'all time')
+        safe_search (bool): Whether to enable safe search
+    
     Returns:
-        list: A list of search results.
+        list: List of search results, each containing title, url, and snippet
     """
-    tool_message_print("duckduckgo_search_tool", [
-        ("query", query), 
-        ("max_results", str(max_results) if max_results else "default"),
-        ("region", region if region else "default"),
-        ("time_filter", time_filter if time_filter else "all time"),
-        ("safe_search", str(safe_search))
-    ])
+    tool_report_print("DuckDuckGo Search", f"query='{query}' | max={max_results} | region={region} | time={time_filter} | safe={safe_search}")
+    
+    # Convert region "default" to "wt-wt" (worldwide)
+    if region == "default":
+        region = "wt-wt"
+    
+    # Convert time filter string to expected format
+    time_mapping = {
+        "all time": None,
+        "day": "d",
+        "week": "w",
+        "month": "m",
+        "year": "y"
+    }
+    timelimit = time_mapping.get(time_filter.lower(), None)
+    
+    # Convert boolean safe_search to string format expected by the API
+    safesearch = "moderate"
+    if safe_search is True:
+        safesearch = "on"
+    elif safe_search is False:
+        safesearch = "off"
+    
     try:
-        ddgs = DDGS(timeout=conf.DUCKDUCKGO_TIMEOUT)
-        results = ddgs.text(
-            query, 
-            max_results=max_results or conf.MAX_DUCKDUCKGO_SEARCH_RESULTS,
-            region=region,
-            safesearch=safe_search,
-            timelimit=time_filter
-        )
-        return list(results)  # Convert generator to list
+        with DDGS() as ddgs:
+            results = list(ddgs.text(
+                keywords=query,
+                region=region,
+                safesearch=safesearch,
+                timelimit=timelimit,
+                max_results=max_results,
+                backend="auto"  # Try all backends in random order
+            ))
+            
+        tool_report_print("Search Complete", f"Found {len(results)} results")
+        return results
+    except TimeoutException as e:
+        error_message = f"DuckDuckGo search timed out: {e}"
+        tool_report_print("Search Error", error_message, is_error=True)
+        return [{"title": "Search Timeout", "href": "", "body": f"Search for '{query}' timed out. Please try again later."}]
+    except RatelimitException as e:
+        error_message = f"DuckDuckGo search rate limited: {e}"
+        tool_report_print("Search Error", error_message, is_error=True)
+        return [{"title": "Rate Limit Reached", "href": "", "body": f"Search rate limit reached. Please try again later with a simpler query."}]
+    except DuckDuckGoSearchException as e:
+        error_message = f"DuckDuckGo search error: {e}"
+        tool_report_print("Search Error", error_message, is_error=True)
+        return [{"title": "Search Error", "href": "", "body": f"Error searching for '{query}'. Error: {str(e)}. Please try a different query."}]
     except Exception as e:
-        tool_report_print("Error during DuckDuckGo search:", str(e), is_error=True)
-        return f"Error during DuckDuckGo search: {e}"
+        error_message = f"Error during DuckDuckGo search: {e}"
+        tool_report_print("Search Error", error_message, is_error=True)
+        return [{"title": "Search Error", "href": "", "body": f"Failed to search for '{query}'. Error: {str(e)}. Please try again with a different query or use another approach."}]
 
 def get_website_text_content(
     url: str, 
