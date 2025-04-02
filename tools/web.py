@@ -34,7 +34,13 @@ def duckduckgo_search_tool(
     Returns:
         list: List of search results, each containing title, url, and snippet
     """
-    tool_report_print("DuckDuckGo Search", f"query='{query}' | max={max_results} | region={region} | time={time_filter} | safe={safe_search}")
+    tool_message_print("DuckDuckGo Search", [
+        ("query", f"'{query}'"),
+        ("max", str(max_results)),
+        ("region", region),
+        ("time", time_filter),
+        ("safe", str(safe_search))
+    ])
     
     # Convert region "default" to "wt-wt" (worldwide)
     if region == "default":

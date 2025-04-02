@@ -286,7 +286,6 @@ class Assistant:
 
             elif successful_tool_call_happened:
                 # If tools executed successfully, get the LLM's summary/next step based on tool results
-                print(f"{Fore.YELLOW}Getting LLM response after successful tool execution...{Style.RESET_ALL}")
                 final_response_after_tools = self.get_completion()
                 # Process this final response (might contain text or more tools)
                 # Reset retries for this new turn
