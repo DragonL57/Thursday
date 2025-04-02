@@ -51,6 +51,22 @@ class Assistant:
 
         self.console = Console()
 
+    def _get_tool_permission(self, function_name: str, function_args: str) -> bool:
+        """Ask user for permission to use a tool and explain its purpose."""
+        try:
+            args = json.loads(function_args)
+            print(f"{Fore.CYAN}[TOOL]{Style.RESET_ALL}{Fore.YELLOW}I will use '{Fore.CYAN}{function_name}{Fore.YELLOW}' with arguments:{Style.RESET_ALL}")
+            for key, value in args.items():
+                print(f"{Fore.CYAN}  ├─ {key}: {Fore.WHITE}{value}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}  ├─ {Fore.WHITE}Allow tool execution? [Y/n]: {Style.RESET_ALL}", end="")
+            response = input().lower()
+            return response == "" or response.startswith("y")
+        except json.JSONDecodeError:
+            print(f"{Fore.CYAN}[TOOL]{Style.RESET_ALL}{Fore.YELLOW}I will use '{Fore.CYAN}{function_name}{Fore.YELLOW}'{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}  ├─ {Fore.WHITE}Allow tool execution? [Y/n]: {Style.RESET_ALL}", end="")
+            response = input().lower()
+            return response == "" or response.startswith("y")
+
     def send_message(self, message):
         self.messages.append({"role": "user", "content": message})
         response = self.get_completion()
@@ -206,6 +222,15 @@ class Assistant:
                     print(f"{Fore.RED}Error: {err_msg}{Style.RESET_ALL}")
                     self.add_toolcall_output(tool_call.id, function_name, err_msg)
                     tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    needs_correction_reprompt = True
+                    continue
+
+                # Ask for permission before executing the tool
+                if not self._get_tool_permission(function_name, tool_call.function.arguments):
+                    err_msg = f"Tool execution cancelled by user: {function_name}"
+                    tool_report_print("Cancelled", err_msg, is_error=True)
+                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
+                    tool_errors.append((tool_call.id, function_name, err_msg))
                     needs_correction_reprompt = True
                     continue
 

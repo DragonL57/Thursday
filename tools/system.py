@@ -21,7 +21,19 @@ def run_shell_command(command: str, blocking: bool, print_output: bool = False) 
       If blocking=True: The output of the command as a string, or an error message.
       If blocking=False: None (command runs in background)
     """
-    tool_message_print("run_shell_command", [("command", command), ("blocking", str(blocking)), ("print_output", str(print_output))])
+    # Initial tool announcement
+    tool_message_print("run_shell_command", [
+        ("command", command),
+        ("blocking", str(blocking)),
+        ("print_output", str(print_output))
+    ])
+    
+    # Show execution output format
+    tool_message_print("run_shell_command", [
+        ("command", command),
+        ("blocking", str(blocking)),
+        ("print_output", str(print_output))
+    ], is_output=True)
     
     def _run_command():
         try:
@@ -60,7 +72,11 @@ def get_current_datetime() -> str:
 
     Returns: A string representing the current time and date.
     """
+    # Initial tool announcement
     tool_message_print("get_current_datetime")
+    
+    # Show execution output format
+    tool_message_print("get_current_datetime", is_output=True)
     now = datetime.datetime.now()
     time_str = now.strftime("%Y-%m-%d %H:%M:%S")
     return time_str

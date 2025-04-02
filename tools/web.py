@@ -34,13 +34,14 @@ def duckduckgo_search_tool(
     Returns:
         list: List of search results, each containing title, url, and snippet
     """
+    # Initial tool call announcement with output format
     tool_message_print("DuckDuckGo Search", [
         ("query", f"'{query}'"),
         ("max", str(max_results)),
         ("region", region),
         ("time", time_filter),
         ("safe", str(safe_search))
-    ])
+    ], is_output=True)
     
     # Convert region "default" to "wt-wt" (worldwide)
     if region == "default":
@@ -110,11 +111,19 @@ def get_website_text_content(
 
     Returns: The text content of the website in the requested format, or an error message.
     """
+    # Initial tool announcement
     tool_message_print("get_website_text_content", [
         ("url", url), 
         ("timeout", str(timeout)),
         ("extract_mode", extract_mode)
     ])
+    
+    # Show execution output
+    tool_message_print("get_website_text_content", [
+        ("url", url), 
+        ("timeout", str(timeout)),
+        ("extract_mode", extract_mode)
+    ], is_output=True)
     
     try:
         if extract_mode == "article":
