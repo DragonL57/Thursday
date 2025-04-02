@@ -59,33 +59,9 @@ class Assistant:
     def print_ai(self, msg: str):
         print(f"{Fore.YELLOW}┌{'─' * 58}┐{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}│ {Fore.GREEN}{self.name}:{Style.RESET_ALL} ", end="")
-        
-        # Create a console with proper width for text wrapping
-        width = 56  # Width of the box minus some margin for the border
-        console = Console(width=width, highlight=False, soft_wrap=True)
-        
-        # Process the message content
-        if msg:
-            # Split on first line to handle separately (after the assistant name)
-            parts = msg.split('\n', 1)
-            first_line = parts[0]
-            
-            # Print first line (after assistant name)
-            console.print(Markdown(first_line), soft_wrap=True)
-            
-            # If there's more content, print with proper indentation but NO vertical bars
-            if len(parts) > 1:
-                # Print a blank line inside the box after first paragraph
-                print(f"{Fore.YELLOW}│{' ' * 58}{Style.RESET_ALL}")
-                
-                # Add proper left padding for the entire remaining content
-                remaining_content = parts[1]
-                # Left margin added to accommodate the box border
-                padded_content = " " + remaining_content
-                
-                # Now print the entire remaining content at once, letting Rich handle wrapping
-                console.print(Markdown(padded_content), soft_wrap=True)
-        
+        self.console.print(
+            Markdown(msg.strip() if msg else ""), end="", soft_wrap=True, no_wrap=False
+        )
         print(f"{Fore.YELLOW}└{'─' * 58}┘{Style.RESET_ALL}")
 
     def get_completion(self):
