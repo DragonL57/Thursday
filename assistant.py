@@ -6,7 +6,7 @@ from typing import Union
 import colorama
 from pydantic import BaseModel
 import litellm
-from utility import TOOLS, validate_tool_call, tool_report_print # Added validate_tool_call, tool_report_print
+from tools import TOOLS, validate_tool_call, tool_report_print # Updated imports
 import pickle
 from litellm.exceptions import RateLimitError
 
