@@ -24,7 +24,7 @@ A short disclaimer this was originally made to be my personal assistant so it mi
 - **Memory:** Can save notes between conversation and remember them.
 - **Saving Conversation:** Save and load previous conversations.
 - **Commands:** Supports creating/executing (code), use `/commands` for more information.
-- **Extension:** For now you are required to write some code to extend its capabilities like adding commands to `CommandExecutor` or making new tools, there should be enough examples in `gem/builtin_commands.py` for commands and `utility.py` for tools
+- **Extension:** For now you are required to write some code to extend its capabilities like adding commands to `CommandExecutor` or making new tools, there should be enough examples in `gem/builtin_commands.py` for commands and the `tools` directory for tool implementations.
 
 ## Getting Started
 
@@ -39,8 +39,8 @@ A short disclaimer this was originally made to be my personal assistant so it mi
 1.  Clone the repository:
 
 ```bash
-git clone https://github.com/Fus3n/gem-assist
-cd gem-assist
+git clone https://github.com/DragonL57/personal-gem.git
+cd personal-gem
 ```
 
 2.  Install dependencies using uv:
@@ -68,7 +68,6 @@ Run the `assistant.py` script to start the chat interface:
 uv run assistant.py
 ```
 
-Ignore `ollama_assist_old.py`
 
 You can then interact with Gemini by typing commands in the chat. Type `exit`, `quit`, or `bye` to close the chat.
 
@@ -86,14 +85,22 @@ And more
 
 ## Tools
 
-gem-assist comes with a set of built-in tools that you can use in your conversations. These tools are defined in the `utility.py` file, some of the functionalities are:
+personal-gem comes with a set of built-in tools that you can use in your conversations. These tools are organized in the `tools` directory by functionality:
 
-- **Web Search:** `duckduckgo_search_tool`
-- **File System:** `list_dir`, `read_file`, `write_files`, `create_directory`, `copy_file`, `move_file`, `rename_file`, `rename_directory`, `get_file_metadata`, `get_directory_size`, `get_multiple_directory_size`
-- **System:** `get_system_info`, `run_shell_command`, `get_current_time`, `get_current_directory`, `get_drives`, `get_environment_variable`
-- **Web Interaction:** `get_website_text_content`, `http_get_request`, `open_url`, `download_file_from_url`
-- **Reddit:** `reddit_search`, `get_reddit_post`, `reddit_submission_comments`
-- **Utility:** `evaluate_math_expression`, `zip_archive_files`, `zip_extract_files`, `write_note`, `read_note`
+- **Web Search:** 
+  - `duckduckgo_search_tool` (Enhanced with region, time filters, and safe search parameters)
+  
+- **Web Interaction:** 
+  - `get_website_text_content` (Enhanced with timeout and extraction modes: 'text', 'markdown', or 'article')
+  
+- **File System:** 
+  - `list_dir`, `read_file`, `write_files`, `create_directory`, `copy_file`, `move_file`, `rename_file`, `rename_directory`, `get_file_metadata`, `get_directory_size`, `get_multiple_directory_size`
+  
+- **System:** 
+  - `get_system_info`, `run_shell_command`, `get_current_time`, `get_current_directory`, `get_drives`, `get_environment_variable`
+
+- **Python Tools:**
+  - `inspect_python_script`, `get_python_function_source_code`
 
 **And much more!**
 
@@ -149,11 +156,3 @@ This roadmap outlines potential enhancements to evolve Gem-Assist towards a more
 ### Why does it has so many seperate tools?
 
 Because I think it does way better when there is one tool for one thing and it can just choose instead of one tool doing multiple things.
-
-## License
-
-This project is licensed under the BSD 3-Clause License - see the [LICENSE](LICENSE) file for details.
-
----
-
-**Disclaimer:** This is a personal project and is provided as-is. Use at your own risk.
