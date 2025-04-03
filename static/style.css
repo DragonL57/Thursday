@@ -1,0 +1,95 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f4f4f4;
+}
+
+#chatbox {
+    width: 90%;
+    max-width: 600px;
+    height: 80vh;
+    max-height: 700px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+#messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.message {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-radius: 15px;
+    max-width: 80%;
+    word-wrap: break-word; /* Ensure long words wrap */
+    white-space: pre-wrap; /* Preserve whitespace and newlines */
+}
+
+.message.user {
+    background-color: #dcf8c6;
+    align-self: flex-end;
+    margin-left: auto; /* Push user messages to the right */
+    text-align: right;
+}
+
+.message.assistant {
+    background-color: #eee;
+    align-self: flex-start;
+    margin-right: auto; /* Push assistant messages to the left */
+    text-align: left;
+}
+
+.message pre { /* Style the pre tag within messages */
+    margin: 0;
+    font-family: inherit; /* Use body font */
+    font-size: inherit;
+    white-space: pre-wrap; /* Ensure wrapping within pre */
+    word-wrap: break-word;
+}
+
+#input-area {
+    display: flex;
+    padding: 10px;
+    background-color: #f9f9f9;
+}
+
+#userInput {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    margin-right: 10px;
+}
+
+#sendButton {
+    padding: 10px 20px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#sendButton:hover {
+    background-color: #0056b3;
+}
+
+#sendButton:disabled {
+    background-color: #aaa;
+    cursor: not-allowed;
+}

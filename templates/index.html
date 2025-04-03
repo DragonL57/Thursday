@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thursday Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div id="chatbox">
+        <div id="messages">
+            <div class="message assistant">Welcome to the Thursday Assistant web interface!</div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="userInput" placeholder="Type your message..." autocomplete="off">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const messagesDiv = document.getElementById('messages');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+
+        function addMessage(sender, text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender.toLowerCase());
+            // Basic rendering, treat text as preformatted to preserve whitespace/newlines
+            const pre = document.createElement('pre');
+            pre.textContent = text;
+            messageDiv.appendChild(pre);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto-scroll
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMessage('User', message);
+            userInput.value = ''; // Clear input
+            sendButton.disabled = true; // Disable button while waiting
+
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    addMessage('Assistant', `Error: ${errorData.error || response.statusText}`);
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.response) {
+                    addMessage('Assistant', data.response);
+                } else if (data.error) {
+                     addMessage('Assistant', `Error: ${data.error}`);
+                } else {
+                    addMessage('Assistant', 'Received an empty response.');
+                }
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                addMessage('Assistant', `Network or server error: ${error.message}`);
+            } finally {
+                 sendButton.disabled = false; // Re-enable button
+                 userInput.focus();
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        userInput.focus(); // Focus input on load
+    </script>
+</body>
+</html>

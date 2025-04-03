@@ -246,7 +246,7 @@ class Assistant:
                 }
         return arg_value
 
-    def __process_response(self, response_json, print_response=True, validation_retries=2): # Added retry counter
+    def __process_response(self, response_json, print_response=False, validation_retries=2): # Added retry counter, default print_response to False
         # Parse the response structure from requests.json()
         # Assuming OpenAI compatible structure: {'choices': [{'message': {...}}]}
         if not response_json or "choices" not in response_json or not response_json["choices"]:
@@ -365,11 +365,11 @@ class Assistant:
                          # Need to add a final assistant message if the original only had tools
                          self.add_msg_assistant(final_text_content)
 
-                    if print_response:
-                        self.print_ai(final_text_content)
+                    # if print_response:
+                    #     self.print_ai(final_text_content) # Commented out print
 
-                    # Return the original message object, but the history reflects the errors
-                    return response_message # Return the dict
+                    # Return the final text content
+                    return final_text_content # Return the text content
 
             elif successful_tool_call_happened:
                 # If tools executed successfully, get the LLM's summary/next step based on tool results
@@ -383,9 +383,9 @@ class Assistant:
                 # The logic within needs_correction_reprompt handles the retry exhaustion.
                 # If somehow we get here, just print any text content from the original message.
                  # Access content via dict key
-                 if print_response and response_message.get("content"):
-                    self.print_ai(response_message["content"])
-                 return response_message # Return the dict
+                 # if print_response and response_message.get("content"): # Commented out print
+                 #    self.print_ai(response_message["content"])
+                 return response_message.get("content") # Return the text content or None
 
         else: # No tool_calls in the initial response message
             # Append the simple text response to history
@@ -393,9 +393,9 @@ class Assistant:
             if response_message not in self.messages:
                  self.messages.append(response_message) # Append the dict
             # Access content via dict key
-            if print_response and response_message.get("content"):
-                self.print_ai(response_message["content"])
-            return response_message # Return the dict
+            # if print_response and response_message.get("content"): # Commented out print
+            #     self.print_ai(response_message["content"])
+            return response_message.get("content") # Return the text content or None
 
 
 if __name__ == "__main__":
