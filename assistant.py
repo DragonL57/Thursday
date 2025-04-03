@@ -2,7 +2,7 @@ import inspect
 import json
 import os
 from typing import Callable
-from typing import Union
+from typing import Union, Dict, List, Any
 import colorama
 import requests
 from requests.exceptions import RequestException
@@ -48,6 +48,7 @@ class Assistant:
         self.messages = []
         self.available_functions = {func.__name__: func for func in tools}
         self.tools = list(map(function_to_json_schema, tools))
+        self.current_tool_calls = []  # Track tool calls for the current request
         
         # Fixed Pollinations API URL for OpenAI-compatible endpoint
         self.api_base_url = "https://text.pollinations.ai/openai"
@@ -65,9 +66,22 @@ class Assistant:
         self.border_width = 100
     
     def send_message(self, message):
+        # Clear any previous tool calls
+        self.current_tool_calls = []
+        
+        # Add user message and get completion
         self.messages.append({"role": "user", "content": message})
         response = self.get_completion()
-        return self.__process_response(response)
+        
+        # Process the response and return both text and tool calls
+        result = self.__process_response(response)
+        
+        # If result is just a string, return it as is for backward compatibility
+        if isinstance(result, str):
+            return {"text": result, "tool_calls": self.current_tool_calls}
+        
+        # Otherwise return the structured response
+        return result
 
     def wrap_text(self, text, width):
         """Custom text wrapper that preserves bullet points and indentation."""
@@ -220,6 +234,12 @@ class Assistant:
                 "content": str(content),
             }
         )
+        # Update the current tool call status and result
+        for tool_call in self.current_tool_calls:
+            if tool_call.get("id") == tool_id:
+                tool_call["status"] = "completed" if "Error" not in str(content) else "error"
+                tool_call["result"] = str(content)
+                break
 
     @cmd(["save"], "Saves the current chat session to pickle file.")
     def save_session(self, name: str, filepath=f"chats"):
@@ -312,7 +332,7 @@ class Assistant:
     def __process_response(self, response_json, print_response=False, validation_retries=2):
         if not response_json or "choices" not in response_json or not response_json["choices"]:
             print(f"{Fore.RED}Error: Invalid response format from API: {response_json}{Style.RESET_ALL}")
-            return {"role": "assistant", "content": "Error: Received invalid response from API."}
+            return {"text": "Error: Received invalid response from API.", "tool_calls": []}
 
         response_message = response_json["choices"][0]["message"]
 
@@ -322,6 +342,16 @@ class Assistant:
         if tool_calls_raw:
             tool_calls = tool_calls_raw
         if tool_calls:
+            # Track tool calls for this response
+            for tool_call in tool_calls:
+                self.current_tool_calls.append({
+                    "id": tool_call["id"],
+                    "name": tool_call["function"]["name"],
+                    "args": tool_call["function"]["arguments"],
+                    "status": "pending",
+                    "result": None
+                })
+            
             if response_message not in self.messages:
                 self.messages.append(response_message)
 
@@ -399,18 +429,18 @@ class Assistant:
                     if not response_message.get("content"):
                         self.add_msg_assistant(final_text_content)
 
-                    return final_text_content
+                    return {"text": final_text_content, "tool_calls": self.current_tool_calls}
 
             elif successful_tool_call_happened:
                 final_response_after_tools = self.get_completion()
                 return self.__process_response(final_response_after_tools, print_response=print_response, validation_retries=2)
             else:
-                return response_message.get("content")
+                return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
 
         else:
             if response_message not in self.messages:
                 self.messages.append(response_message)
-            return response_message.get("content")
+            return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
 
 
 if __name__ == "__main__":

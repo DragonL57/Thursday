@@ -42,11 +42,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarManager = new SidebarManager(elements.toggleSidebarButton, elements.sidebar);
     const settingsManager = new SettingsManager(elements, messagingComponent);
     
-    // After a new message is added to the DOM, render any LaTeX in it
+    // After a new message is added to the DOM, render any LaTeX in it and highlight code
     const originalAddMessage = MessagingComponent.prototype.addMessage;
-    MessagingComponent.prototype.addMessage = function(message, isUser = false) {
-        const messageElement = originalAddMessage.call(this, message, isUser);
+    MessagingComponent.prototype.addMessage = function(message, isUser = false, toolCalls = []) {
+        const messageElement = originalAddMessage.call(this, message, isUser, toolCalls);
         if (messageElement) {
+            // Apply syntax highlighting to any code blocks
+            messageElement.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+            
             // Wait a bit to ensure content is fully rendered
             setTimeout(() => {
                 try {
@@ -86,6 +91,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 100);
         }
         return messageElement;
+    };
+    
+    // Enable code highlighting when updating tool call results
+    const originalUpdateToolCall = MessagingComponent.prototype.updateToolCall;
+    MessagingComponent.prototype.updateToolCall = function(toolCall) {
+        originalUpdateToolCall.call(this, toolCall);
+        const element = document.getElementById(`tool-call-${toolCall.id}`);
+        if (element) {
+            element.querySelectorAll('pre code').forEach((block) => {
+                hljs.highlightElement(block);
+            });
+        }
     };
     
     // Set up input handling events

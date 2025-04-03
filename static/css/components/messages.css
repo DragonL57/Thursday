@@ -65,6 +65,154 @@
     border-color: var(--message-user-border);
 }
 
+/* Tool message styles */
+.tool-message .message-avatar {
+    background-color: #9333ea; /* Purple color for tools */
+    color: white;
+    border-color: transparent;
+}
+
+/* Compact tool message styles */
+.tool-message.compact {
+    margin-bottom: 0.5rem; /* Further reduced margin between messages */
+}
+
+.tool-message.compact .message-bubble {
+    padding: 0.3rem 0.5rem; /* Even smaller padding */
+    background-color: rgba(147, 51, 234, 0.05);
+    border-color: rgba(147, 51, 234, 0.2);
+}
+
+.tool-status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin: 0 0.5rem;
+}
+
+.tool-status-indicator.pending {
+    background-color: var(--text-tertiary);
+}
+
+.tool-status-indicator.completed {
+    background-color: var(--primary-color);
+}
+
+.tool-status-indicator.error {
+    background-color: #ef4444;
+}
+
+.tool-execution {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem; /* Even smaller gap between command and result */
+}
+
+.tool-command {
+    font-family: monospace;
+    font-size: 0.8rem; /* Even smaller font size */
+    color: var(--text-secondary);
+    word-break: break-all;
+    padding: 0; /* Remove any padding */
+    margin: 0; /* Remove any margin */
+}
+
+.tool-command code {
+    background: none;
+    padding: 0;
+}
+
+.tool-result {
+    border-top: 1px dotted var(--border-color);
+    padding-top: 0.1rem; /* Minimal padding */
+    margin-top: 0.1rem; /* Minimal margin */
+    font-size: 0.75rem; /* Smaller font */
+}
+
+.tool-result pre {
+    margin: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.01); /* Even more subtle background */
+    padding: 0.15rem; /* Minimal padding */
+    border-radius: calc(var(--border-radius) - 3px);
+}
+
+.tool-result pre code {
+    font-size: 0.7rem; /* Smallest reasonably readable font */
+    line-height: 1.1; /* Very tight line height */
+    padding: 0;
+    white-space: pre-wrap; /* Allow wrapping for better mobile display */
+}
+
+/* For single-line outputs, make them even more compact */
+.tool-result.single-line pre {
+    padding: 0.1rem 0.15rem;
+}
+
+.tool-result.single-line pre code {
+    line-height: 1;
+}
+
+.tool-result.hidden {
+    display: none;
+}
+
+.tool-message-bubble {
+    background-color: rgba(147, 51, 234, 0.05); /* Light purple background */
+    border-color: rgba(147, 51, 234, 0.2);
+}
+
+.tool-status {
+    display: inline-block;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.tool-status.pending {
+    background-color: var(--text-tertiary);
+    color: white;
+}
+
+.tool-status.completed {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.tool-status.error {
+    background-color: #ef4444;
+    color: white;
+}
+
+.tool-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tool-args h4, 
+.tool-result h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.tool-args pre, 
+.tool-result pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow-x: auto;
+}
+
 /* Typography within message bubbles */
 .message-bubble p {
     margin-bottom: 0.75rem;
@@ -239,4 +387,119 @@
     border-radius: 3px;
     border: 1px dashed var(--primary-color);
     cursor: help;
+}
+
+/* Tool call styles */
+.tool-calls-container {
+    margin-top: 1rem;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 0.75rem;
+}
+
+.tool-call {
+    margin-bottom: 0.75rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.tool-call.pending {
+    border-left: 3px solid var(--text-tertiary);
+}
+
+.tool-call.completed {
+    border-left: 3px solid var(--primary-color);
+}
+
+.tool-call.error {
+    border-left: 3px solid #ef4444;
+}
+
+.tool-call-header {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-bottom: 1px solid var(--border-color);
+    gap: 0.5rem;
+}
+
+.tool-call-icon {
+    font-size: 1rem;
+}
+
+.tool-call-name {
+    font-family: monospace;
+    font-weight: 500;
+    flex-grow: 1;
+}
+
+.tool-call-status {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+
+.tool-call.pending .tool-call-status {
+    background-color: var(--text-tertiary);
+    color: white;
+}
+
+.tool-call.completed .tool-call-status {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.tool-call.error .tool-call-status {
+    background-color: #ef4444;
+    color: white;
+}
+
+.tool-call-body {
+    padding: 0.75rem;
+}
+
+.tool-call-args pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.25rem; /* Further reduced padding */
+    font-size: 0.7rem; /* Even smaller font */
+    color: var(--text-secondary);
+    overflow-x: auto;
+}
+
+.tool-call-result {
+    margin-top: 0.4rem;
+    border-top: 1px dotted var(--border-color);
+    padding-top: 0.3rem; /* Further reduced padding */
+}
+
+.tool-call-result.hidden {
+    display: none;
+}
+
+.tool-call-result-header {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.tool-call-result pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.25rem; /* Further reduced padding */
+    font-size: 0.7rem; /* Even smaller font */
+    color: var(--text-secondary);
+    overflow-x: auto;
+    max-height: 150px; /* Limited height */
+    overflow-y: auto;
+}
+
+.dark-mode .tool-call-args pre,
+.dark-mode .tool-call-result pre {
+    background-color: rgba(0, 0, 0, 0.2);
 }

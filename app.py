@@ -58,9 +58,17 @@ def chat():
 
         # Send message to the assistant and get the response
         assistant_response = user_assistant.send_message(user_message)
-
-        # Return the assistant's response
-        return jsonify({"response": assistant_response})
+        
+        # Format response for the client
+        if isinstance(assistant_response, dict) and "text" in assistant_response:
+            # New format with text and tool calls
+            return jsonify({
+                "response": assistant_response["text"],
+                "tool_calls": assistant_response.get("tool_calls", [])
+            })
+        else:
+            # Fallback for backward compatibility
+            return jsonify({"response": assistant_response})
 
     except Exception as e:
         print(f"Error during chat processing: {e}")
