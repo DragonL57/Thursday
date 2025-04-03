@@ -61,13 +61,20 @@ You can then interact with Thursday by typing commands in the chat. Type `exit`,
 
 The main configuration file is `config.py`. Here you can customize:
 
-- **`MODEL`**: Choose the Pollinations AI model to use (e.g., `"openai-large"`).
+- **`MODEL`**: Currently set to "openai-large" for use with Pollinations AI.
 - **`NAME`**: Set the name of your assistant (defaults to "Thursday").
 - **`SYSTEM_PROMPT`**: Modify the system prompt to adjust the assistant's personality and instructions.
-
-And more
+- **API retry parameters**: Control how the application handles temporary failures and rate limits.
 
 **Note:** Restart the `assistant.py` script after making changes to `config.py`.
+
+## Model Selection
+
+Thursday supports multiple AI model providers through a flexible naming scheme:
+
+- **Default OpenAI-compatible:** `openai-large` (Uses Pollinations.AI's OpenAI-compatible endpoint)
+
+To change the model, modify the `MODEL` variable in `config.py`. Note that tool calling capabilities may vary by model provider and specific model.
 
 ## Tools
 

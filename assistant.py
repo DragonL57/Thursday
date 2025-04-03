@@ -48,15 +48,22 @@ class Assistant:
         self.messages = []
         self.available_functions = {func.__name__: func for func in tools}
         self.tools = list(map(function_to_json_schema, tools))
+        
+        # Fixed Pollinations API URL for OpenAI-compatible endpoint
         self.api_base_url = "https://text.pollinations.ai/openai"
-        self.model_provider = "openai"
+        
+        # Set retry parameters from config or defaults
+        self.retry_count = getattr(conf, 'API_RETRY_COUNT', 3)
+        self.base_delay = getattr(conf, 'API_BASE_DELAY', 1.0)
+        self.max_delay = getattr(conf, 'API_MAX_DELAY', 10.0)
+        self.request_timeout = conf.WEB_REQUEST_TIMEOUT
 
         if system_instruction:
             self.messages.append({"role": "system", "content": system_instruction})
 
         self.console = Console()
         self.border_width = 100
-
+    
     def send_message(self, message):
         self.messages.append({"role": "user", "content": message})
         response = self.get_completion()
@@ -104,18 +111,23 @@ class Assistant:
         self.console.print(Markdown(formatted_msg))
         print(f"{Fore.YELLOW}└{'─' * self.border_width}┘{Style.RESET_ALL}")
 
-    def get_completion(self, retry_count=3, base_delay=1.0, max_delay=10.0):
+    def get_completion(self, retry_count=None, base_delay=None, max_delay=None):
         """
         Get a completion from the LLM API with retry logic for transient errors.
         
         Args:
-            retry_count: Maximum number of retries
-            base_delay: Base delay between retries in seconds
-            max_delay: Maximum delay between retries in seconds
+            retry_count: Maximum number of retries (defaults to self.retry_count)
+            base_delay: Base delay between retries in seconds (defaults to self.base_delay)
+            max_delay: Maximum delay between retries in seconds (defaults to self.max_delay)
         
         Returns:
             API response JSON
         """
+        # Use instance values if parameters not provided
+        retry_count = retry_count if retry_count is not None else self.retry_count
+        base_delay = base_delay if base_delay is not None else self.base_delay
+        max_delay = max_delay if max_delay is not None else self.max_delay
+        
         last_exception = None
         
         for attempt in range(retry_count + 1):
@@ -165,7 +177,7 @@ class Assistant:
     
     def _make_api_request(self):
         """
-        Actual implementation of API request to Pollinations.
+        Implementation of API request to Pollinations AI using the openai-large model.
         """
         payload = {
             "model": self.model,
@@ -176,11 +188,22 @@ class Assistant:
             "seed": conf.SEED,
         }
         
+        # Remove None values from payload
         payload = {k: v for k, v in payload.items() if v is not None}
+        
+        # Add tools/functions if available
+        if self.tools:
+            payload["tools"] = self.tools
         
         headers = {"Content-Type": "application/json"}
         
-        response = requests.post(self.api_base_url, json=payload, headers=headers, timeout=60)
+        # Use the timeout from config
+        response = requests.post(
+            self.api_base_url, 
+            json=payload, 
+            headers=headers, 
+            timeout=self.request_timeout
+        )
         response.raise_for_status()
         
         return response.json()
@@ -288,8 +311,8 @@ class Assistant:
 
     def __process_response(self, response_json, print_response=False, validation_retries=2):
         if not response_json or "choices" not in response_json or not response_json["choices"]:
-             print(f"{Fore.RED}Error: Invalid response format from API: {response_json}{Style.RESET_ALL}")
-             return {"role": "assistant", "content": "Error: Received invalid response from API."}
+            print(f"{Fore.RED}Error: Invalid response format from API: {response_json}{Style.RESET_ALL}")
+            return {"role": "assistant", "content": "Error: Received invalid response from API."}
 
         response_message = response_json["choices"][0]["message"]
 
@@ -297,10 +320,10 @@ class Assistant:
 
         tool_calls = []
         if tool_calls_raw:
-             tool_calls = tool_calls_raw
+            tool_calls = tool_calls_raw
         if tool_calls:
             if response_message not in self.messages:
-                 self.messages.append(response_message)
+                self.messages.append(response_message)
 
             needs_correction_reprompt = False
             successful_tool_call_happened = False
@@ -343,7 +366,7 @@ class Assistant:
                     function_response = function_to_call(**converted_args)
 
                     if response_message.get("content"):
-                         pass
+                        pass
 
                     self.add_toolcall_output(
                         tool_id, function_name, function_response
@@ -374,7 +397,7 @@ class Assistant:
                     print(f"{Fore.RED}Max validation retries exceeded. Failed to get valid tool call(s).{Style.RESET_ALL}")
                     final_text_content = response_message.get("content") or f"Could not complete the tool operation(s) ({', '.join([name for _, name, _ in tool_errors])}) after multiple retries due to validation or execution errors."
                     if not response_message.get("content"):
-                         self.add_msg_assistant(final_text_content)
+                        self.add_msg_assistant(final_text_content)
 
                     return final_text_content
 
@@ -382,11 +405,11 @@ class Assistant:
                 final_response_after_tools = self.get_completion()
                 return self.__process_response(final_response_after_tools, print_response=print_response, validation_retries=2)
             else:
-                 return response_message.get("content")
+                return response_message.get("content")
 
         else:
             if response_message not in self.messages:
-                 self.messages.append(response_message)
+                self.messages.append(response_message)
             return response_message.get("content")
 
 

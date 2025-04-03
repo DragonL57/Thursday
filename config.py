@@ -9,31 +9,21 @@ import platform
 import requests
 
 # Which model to use
-# can be gemini/gemini-2.0-flash or gemini/gemini-2.0-flash-lite
-# Also supports ollama if you are using `assistant.py` by setting `ollama/qwen2.5`
-# or if you want to use gemini-2.0-flash from openrouter for example you can put `openrouter/google/gemini-2.0-flash-exp:free`
-# Not every model supports tool calling so some might throw errors
-# Here you can find all the supported provider: https://docs.litellm.ai/docs/providers/
-
-MODEL = "openai-large" # Changed to Pollinations AI compatible model
+# Currently only supports "openai-large" with Pollinations AI
+MODEL = "openai-large"  # Pollinations AI OpenAI-compatible model
 
 # The assistants name
 NAME = "Thursday"
 
 # Model Parameters (None means default)
-
 TEMPERATURE = 0.25
 TOP_P = None
 MAX_TOKENS = None
 SEED = None
 
 # Script parameters
-
 # Whether to clear the console before starting
 CLEAR_BEFORE_START = True
-
-
-# SAFETY_SETTINGS removed as it's specific to Gemini/LiteLLM
 
 def get_location_info():
     try:
@@ -129,7 +119,6 @@ def get_system_prompt():
     """
 
 # DUCKDUCKGO SEARCH
-
 # The max amount of results duckduckgo search tool can return
 MAX_DUCKDUCKGO_SEARCH_RESULTS: int = 4
 
@@ -141,3 +130,8 @@ WEB_REQUEST_TIMEOUT: int = 30
 
 # Timeout for DuckDuckGo searches
 DUCKDUCKGO_TIMEOUT: int = 20
+
+# API retry parameters
+API_RETRY_COUNT = 3
+API_BASE_DELAY = 1.0
+API_MAX_DELAY = 10.0

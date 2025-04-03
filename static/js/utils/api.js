@@ -18,7 +18,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
  * @param {number} maxDelay - Maximum delay in ms
  * @returns {Promise<Response>} - The fetch response
  */
-async function fetchWithRetry(url, options, retries = 3, baseDelay = 500, maxDelay = 5000) {
+async function fetchWithRetry(url, options, retries = 3, baseDelay = 1000, maxDelay = 10000) {
     let lastError;
     
     for (let attempt = 0; attempt <= retries; attempt++) {
