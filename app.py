@@ -1,8 +1,10 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, Response
 import config as conf
 from tools import TOOLS  # Import the tools
 from assistant import Assistant  # Import the Assistant class
 import os
+import json
+import time
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secure secret key for session management
@@ -33,8 +35,74 @@ def index():
     # Serve the main HTML page
     return render_template('index.html')
 
+@app.route('/chat/stream', methods=['POST'])
+def chat_stream():
+    """Stream chat responses using server-sent events."""
+    if not assistant:
+        return jsonify({"error": "Assistant not initialized"}), 500
+
+    try:
+        user_message = request.json.get('message')
+        if not user_message:
+            return jsonify({"error": "No message provided"}), 400
+
+        # Get session ID (or client IP if no session available)
+        session_id = session.get('user_id', request.remote_addr)
+        
+        # Create or get user-specific assistant instance
+        if session_id not in assistants:
+            assistants[session_id] = Assistant(
+                model=conf.MODEL,
+                system_instruction=conf.get_system_prompt().strip(),
+                tools=TOOLS,
+                stream_handler=True  # Enable streaming mode
+            )
+        
+        user_assistant = assistants[session_id]
+
+        def generate():
+            # Start processing and track tool calls
+            user_assistant.prepare_message(user_message)
+            
+            # Send an event indicating the start of processing
+            yield f"data: {json.dumps({'event': 'start'})}\n\n"
+            
+            # Stream tool calls as they are executed
+            tool_calls_seen = set()
+            while user_assistant.is_processing:
+                current_tools = user_assistant.get_current_tool_calls()
+                for tool_call in current_tools:
+                    tool_id = tool_call.get('id')
+                    if tool_id and tool_id not in tool_calls_seen:
+                        # New tool call
+                        yield f"data: {json.dumps({'event': 'tool_call', 'data': tool_call})}\n\n"
+                        tool_calls_seen.add(tool_id)
+                    elif tool_id in tool_calls_seen:
+                        # Tool call was updated
+                        yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n"
+                
+                time.sleep(0.1)  # Short sleep to avoid CPU thrashing
+            
+            # Get the final response after all tools have been executed
+            final_response = user_assistant.get_final_response()
+            yield f"data: {json.dumps({'event': 'final', 'data': final_response})}\n\n"
+            
+            # Send end of stream
+            yield f"data: {json.dumps({'event': 'done'})}\n\n"
+        
+        return Response(generate(), mimetype='text/event-stream')
+
+    except Exception as e:
+        print(f"Error during chat streaming: {e}")
+        # Return error as a stream event
+        return Response(
+            f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n",
+            mimetype='text/event-stream'
+        )
+
 @app.route('/chat', methods=['POST'])
 def chat():
+    """Legacy non-streaming API endpoint for backward compatibility."""
     if not assistant:
         return jsonify({"error": "Assistant not initialized"}), 500
 

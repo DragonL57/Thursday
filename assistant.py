@@ -5,6 +5,7 @@ from typing import Callable
 from typing import Union, Dict, List, Any
 import colorama
 import requests
+import threading
 from requests.exceptions import RequestException
 from pydantic import BaseModel
 from tools import TOOLS, validate_tool_call, tool_report_print
@@ -41,6 +42,7 @@ class Assistant:
         name: str = "Assistant",
         tools: list[Callable] = [],
         system_instruction: str = "",
+        stream_handler: bool = False
     ) -> None:
         self.model = model
         self.name = name
@@ -49,6 +51,12 @@ class Assistant:
         self.available_functions = {func.__name__: func for func in tools}
         self.tools = list(map(function_to_json_schema, tools))
         self.current_tool_calls = []  # Track tool calls for the current request
+        
+        # Streaming support
+        self.stream_handler = stream_handler
+        self.is_processing = False
+        self._processing_thread = None
+        self._final_response = None
         
         # Fixed Pollinations API URL for OpenAI-compatible endpoint
         self.api_base_url = "https://text.pollinations.ai/openai"
@@ -65,7 +73,55 @@ class Assistant:
         self.console = Console()
         self.border_width = 100
     
+    def prepare_message(self, message):
+        """
+        Prepare to process a message in streaming mode.
+        This starts a background thread for processing.
+        """
+        # Clear any previous tool calls and results
+        self.current_tool_calls = []
+        self._final_response = None
+        
+        # Add user message
+        self.messages.append({"role": "user", "content": message})
+        
+        # Start processing in a background thread
+        self.is_processing = True
+        self._processing_thread = threading.Thread(target=self._process_message_thread)
+        self._processing_thread.start()
+    
+    def _process_message_thread(self):
+        """Background thread to process the message and execute tools."""
+        try:
+            response = self.get_completion()
+            result = self.__process_response(response)
+            
+            # Store the final response
+            if isinstance(result, str):
+                self._final_response = result
+            elif isinstance(result, dict) and "text" in result:
+                self._final_response = result["text"]
+            else:
+                self._final_response = "Processing completed but no response was generated."
+                
+        except Exception as e:
+            print(f"Error in processing thread: {e}")
+            self._final_response = f"Error during processing: {str(e)}"
+        finally:
+            self.is_processing = False
+    
+    def get_current_tool_calls(self):
+        """Get the current state of tool calls for streaming."""
+        return self.current_tool_calls
+    
+    def get_final_response(self):
+        """Get the final text response after all processing is complete."""
+        return self._final_response
+    
     def send_message(self, message):
+        """
+        Send a message and get the response (non-streaming mode).
+        """
         # Clear any previous tool calls
         self.current_tool_calls = []
         

@@ -63,11 +63,13 @@ async function fetchWithRetry(url, options, retries = 3, baseDelay = 1000, maxDe
 }
 
 /**
- * Send a message to the backend
+ * Send a message to the backend and handle streaming responses
  * @param {string} message - The message to send
+ * @param {Function} onToolCall - Callback function when a tool call is received
+ * @param {Function} onFinalResponse - Callback function when the final response is received
  * @returns {Promise<Object>} - The response data
  */
-export async function sendChatMessage(message) {
+export async function sendChatMessage(message, onToolCall, onFinalResponse) {
     try {
         const response = await fetchWithRetry('/chat', {
             method: 'POST',
@@ -79,10 +81,127 @@ export async function sendChatMessage(message) {
             throw new Error(`Server responded with status: ${response.status}`);
         }
         
-        return await response.json();
+        const responseData = await response.json();
+        
+        // If we have tool calls, process them first
+        if (responseData.tool_calls && responseData.tool_calls.length > 0 && typeof onToolCall === 'function') {
+            for (const toolCall of responseData.tool_calls) {
+                // Call the callback for each tool call
+                onToolCall(toolCall);
+            }
+        }
+        
+        // Then process the final response
+        if (typeof onFinalResponse === 'function') {
+            onFinalResponse(responseData.response);
+        }
+        
+        return responseData;
     } catch (error) {
         console.error('Error sending chat message:', error);
         throw error;
+    }
+}
+
+/**
+ * Stream chat messages using server-sent events
+ * @param {string} message - The message to send
+ * @param {Object} callbacks - Callback functions for different events
+ * @param {Function} callbacks.onToolCall - Called when a tool call is received
+ * @param {Function} callbacks.onToolUpdate - Called when a tool call is updated
+ * @param {Function} callbacks.onFinalResponse - Called when the final response is received
+ * @param {Function} callbacks.onError - Called when an error occurs
+ * @param {Function} callbacks.onDone - Called when the stream is complete
+ * @returns {Promise<void>}
+ */
+export async function streamChatMessage(message, callbacks = {}) {
+    const { onToolCall, onToolUpdate, onFinalResponse, onError, onDone } = callbacks;
+    
+    try {
+        const response = await fetch('/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Server responded with status: ${response.status}`);
+        }
+        
+        // Create event source from response body
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        
+        let buffer = '';
+        
+        while (true) {
+            const { value, done } = await reader.read();
+            
+            if (done) {
+                if (typeof onDone === 'function') {
+                    onDone();
+                }
+                break;
+            }
+            
+            buffer += decoder.decode(value, { stream: true });
+            
+            // Process complete events in the buffer
+            let eventEnd = buffer.indexOf('\n\n');
+            while (eventEnd >= 0) {
+                const eventData = buffer.substring(0, eventEnd).trim();
+                buffer = buffer.substring(eventEnd + 2);
+                
+                // Parse SSE data format
+                if (eventData.startsWith('data: ')) {
+                    try {
+                        const parsedData = JSON.parse(eventData.substring(6));
+                        
+                        // Handle different event types
+                        switch (parsedData.event) {
+                            case 'tool_call':
+                                if (typeof onToolCall === 'function') {
+                                    onToolCall(parsedData.data);
+                                }
+                                break;
+                                
+                            case 'tool_update':
+                                if (typeof onToolUpdate === 'function') {
+                                    onToolUpdate(parsedData.data);
+                                }
+                                break;
+                                
+                            case 'final':
+                                if (typeof onFinalResponse === 'function') {
+                                    onFinalResponse(parsedData.data);
+                                }
+                                break;
+                                
+                            case 'error':
+                                if (typeof onError === 'function') {
+                                    onError(parsedData.data);
+                                }
+                                break;
+                                
+                            case 'done':
+                                if (typeof onDone === 'function') {
+                                    onDone();
+                                }
+                                break;
+                        }
+                    } catch (e) {
+                        console.error('Error parsing SSE data:', e);
+                    }
+                }
+                
+                eventEnd = buffer.indexOf('\n\n');
+            }
+        }
+    } catch (error) {
+        console.error('Error streaming chat message:', error);
+        if (typeof onError === 'function') {
+            onError(error.message);
+        }
     }
 }
 

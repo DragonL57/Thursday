@@ -1,4 +1,4 @@
-import { sendChatMessage } from '../utils/api.js';
+import { sendChatMessage, streamChatMessage } from '../utils/api.js';
 import { adjustTextareaHeight, scrollToBottom } from '../utils/dom.js';
 
 export class MessagingComponent {
@@ -229,30 +229,38 @@ export class MessagingComponent {
         this.loadingIndicator.classList.remove('hidden');
         
         try {
-            const data = await sendChatMessage(message);
-            
-            // Hide loading indicator
-            this.loadingIndicator.classList.add('hidden');
-            this.isProcessing = false;
-            
-            if (data.error) {
-                this.addMessage(`Error: ${data.error}`);
-            } else {
-                // First add tool calls as separate messages if they exist
-                if (data.tool_calls && data.tool_calls.length > 0) {
-                    // Add each tool call as its own message before the assistant response
-                    data.tool_calls.forEach(toolCall => {
-                        this.addToolCallMessage(toolCall);
-                    });
-                }
+            // Use streaming API with callbacks for real-time updates
+            await streamChatMessage(message, {
+                // Called when a new tool call is detected
+                onToolCall: (toolCall) => {
+                    this.addToolCallMessage(toolCall);
+                },
                 
-                // Then add the assistant's text response
-                if (data.response) {
-                    this.addMessage(data.response, false);
-                } else {
-                    this.addMessage('Sorry, I received an empty response. Please try again.');
+                // Called when a tool call is updated with results
+                onToolUpdate: (toolCall) => {
+                    this.updateToolCall(toolCall);
+                },
+                
+                // Called when the final response is ready
+                onFinalResponse: (response) => {
+                    if (response) {
+                        this.addMessage(response, false);
+                    }
+                },
+                
+                // Called on error
+                onError: (error) => {
+                    console.error('Error during streaming:', error);
+                    this.addMessage(`Error: ${error}`, false);
+                },
+                
+                // Called when the stream is complete
+                onDone: () => {
+                    // Hide loading indicator
+                    this.loadingIndicator.classList.add('hidden');
+                    this.isProcessing = false;
                 }
-            }
+            });
         } catch (error) {
             console.error('Error:', error);
             this.loadingIndicator.classList.add('hidden');
