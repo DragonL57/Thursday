@@ -1,13 +1,12 @@
-# Gem-assist - A Personal Assistant In Your Terminal
+# Thursday - A Personal Assistant In Your Terminal
 
-Gem-Assist is a Python-based personal assistant that leverages the power of Google's Gemini models(and other) to help you with various tasks. It's designed to be versatile and extensible, offering a range of tools to interact with your system and the internet. (These were written by AI)
+Thursday is a Python-based personal assistant that leverages the power of Pollinations AI models to help you with various tasks. It's designed to be versatile and extensible, offering a range of tools to interact with your system and the internet. (These were written by AI)
 
-A short disclaimer this was originally made to be my personal assistant so it might not be as versatile as you might expect. Originally this was Gemini only now it supports alot because of litellm support, look into `config.py` for more information.
+A short disclaimer this was originally made to be my personal assistant so it might not be as versatile as you might expect. It uses Pollinations AI as the backend for its language capabilities.
 
 ## Features
 
-- **Powered by LLM:** Utilizes LLM's for natural language understanding and generation.
-
+- **Powered by LLM:** Utilizes Pollinations AI models for natural language understanding and generation.
 - **Tool-based architecture:** Equipped with a variety of tools for tasks like:
   - Web searching (DuckDuckGo)
   - File system operations (listing directories, reading/writing files, etc.)
@@ -28,15 +27,15 @@ A short disclaimer this was originally made to be my personal assistant so it mi
 
 - Python 3.11 or higher
 - uv (for dependency management) - [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
-- Google Gemini API key (if using gemini) - [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey) or check out [docs.litellm.ai/docs/providers/](https://docs.litellm.ai/docs/providers/) for more models
+- An internet connection (for Pollinations AI access)
 
 ### Installation
 
 1.  Clone the repository:
 
 ```bash
-git clone https://github.com/DragonL57/personal-gem.git
-cd personal-gem
+git clone https://github.com/DragonL57/personal-gem.git thursday # Cloning into a 'thursday' directory
+cd thursday
 ```
 
 2.  Install dependencies using uv:
@@ -47,14 +46,6 @@ This will create venv if it doesn't exist
 uv sync
 ```
 
-3.  Set up environment variables:
-    - Create a `.env` file in the project root.
-    - Add your Google Cloud API key:
-      ```
-      GEMINI_API_KEY=YOUR_API_KEY # or any other API key with proper key name, if used
-      REDDIT_ID=YOUR_REDDIT_CLIENT_ID # (Optional, for Reddit tools)
-      REDDIT_SECRET=YOUR_REDDIT_CLIENT_SECRET # (Optional, for Reddit tools)
-      ```
 
 ### Usage
 
@@ -64,15 +55,14 @@ Run the `assistant.py` script to start the chat interface:
 uv run assistant.py
 ```
 
-
-You can then interact with Gemini by typing commands in the chat. Type `exit`, `quit`, or `bye` to close the chat.
+You can then interact with Thursday by typing commands in the chat. Type `exit`, `quit`, or `bye` to close the chat.
 
 ## Configuration
 
 The main configuration file is `config.py`. Here you can customize:
 
-- **`MODEL`**: Choose the Gemini model to use (e.g., `"gemini/gemini-2.0-flash"`, `"gemini/gemini-2.0-pro-exp-02-05"`) for more models checkout: [docs.litellm.ai/docs/providers/](https://docs.litellm.ai/docs/providers/), for local models its recommended to not run really small models.
-- **`NAME`**: Set the name of your assistant.
+- **`MODEL`**: Choose the Pollinations AI model to use (e.g., `"openai-large"`).
+- **`NAME`**: Set the name of your assistant (defaults to "Thursday").
 - **`SYSTEM_PROMPT`**: Modify the system prompt to adjust the assistant's personality and instructions.
 
 And more
@@ -81,18 +71,18 @@ And more
 
 ## Tools
 
-personal-gem comes with a set of built-in tools that you can use in your conversations. These tools are organized in the `tools` directory by functionality:
+Thursday comes with a set of built-in tools that you can use in your conversations. These tools are organized in the `tools` directory by functionality:
 
-- **Web Search:** 
+- **Web Search:**
   - `duckduckgo_search_tool` (Enhanced with region, time filters, and safe search parameters)
-  
-- **Web Interaction:** 
+
+- **Web Interaction:**
   - `get_website_text_content` (Enhanced with timeout and extraction modes: 'text', 'markdown', or 'article')
-  
-- **File System:** 
+
+- **File System:**
   - `list_dir`, `read_file`, `write_files`, `create_directory`, `copy_file`, `move_file`, `rename_file`, `rename_directory`, `get_file_metadata`, `get_directory_size`, `get_multiple_directory_size`
-  
-- **System:** 
+
+- **System:**
   - `get_system_info`, `run_shell_command`, `get_current_time`, `get_current_directory`, `get_drives`, `get_environment_variable`
 
 - **Python Tools:**
@@ -110,12 +100,16 @@ uv run pytest tests/
 
 The project dependencies are managed by UV and listed in `pyproject.toml`. Key dependencies include:
 
-- `google-genai`
-- `ollama`
+- `requests`
 - `duckduckgo-search`
-- `praw`
 - `rich`
 - `python-dotenv`
+- `beautifulsoup4`
+- `lxml`
+- `docstring-parser`
+- `prompt-toolkit`
+- `colorama`
+- `pydantic`
 
 ## Contributing
 
@@ -123,7 +117,7 @@ All contributions are welcome! Please fork the repository and create a pull requ
 
 ## Future Enhancements (Agentic Capabilities Roadmap)
 
-This roadmap outlines potential enhancements to evolve Gem-Assist towards a more autonomous, agentic system capable of complex goal achievement, reasoning, and adaptation.
+This roadmap outlines potential enhancements to evolve Thursday towards a more autonomous, agentic system capable of complex goal achievement, reasoning, and adaptation.
 
 ### 1. Goal Management and Planning
 *   **Goal Decomposition:** Enable the assistant to break down high-level user goals (e.g., "Plan my trip") into actionable sub-tasks using LLM-driven planning.
