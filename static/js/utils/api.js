@@ -65,16 +65,23 @@ async function fetchWithRetry(url, options, retries = 3, baseDelay = 1000, maxDe
 /**
  * Send a message to the backend and handle streaming responses
  * @param {string} message - The message to send
+ * @param {string|null} imageData - Optional base64 image data
  * @param {Function} onToolCall - Callback function when a tool call is received
  * @param {Function} onFinalResponse - Callback function when the final response is received
  * @returns {Promise<Object>} - The response data
  */
-export async function sendChatMessage(message, onToolCall, onFinalResponse) {
+export async function sendChatMessage(message, imageData = null, onToolCall, onFinalResponse) {
     try {
+        // Construct request payload with or without image
+        const payload = { message };
+        if (imageData) {
+            payload.imageData = imageData;
+        }
+        
         const response = await fetchWithRetry('/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message }),
+            body: JSON.stringify(payload),
         });
         
         if (!response.ok) {
@@ -106,6 +113,7 @@ export async function sendChatMessage(message, onToolCall, onFinalResponse) {
 /**
  * Stream chat messages using server-sent events
  * @param {string} message - The message to send
+ * @param {string|null} imageData - Optional base64 image data
  * @param {Object} callbacks - Callback functions for different events
  * @param {Function} callbacks.onToolCall - Called when a tool call is received
  * @param {Function} callbacks.onToolUpdate - Called when a tool call is updated
@@ -114,14 +122,20 @@ export async function sendChatMessage(message, onToolCall, onFinalResponse) {
  * @param {Function} callbacks.onDone - Called when the stream is complete
  * @returns {Promise<void>}
  */
-export async function streamChatMessage(message, callbacks = {}) {
+export async function streamChatMessage(message, imageData = null, callbacks = {}) {
     const { onToolCall, onToolUpdate, onFinalResponse, onError, onDone } = callbacks;
     
     try {
+        // Construct request payload with or without image
+        const payload = { message };
+        if (imageData) {
+            payload.imageData = imageData;
+        }
+        
         const response = await fetch('/chat/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
+            body: JSON.stringify(payload)
         });
         
         if (!response.ok) {

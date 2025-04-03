@@ -1,17 +1,20 @@
 import inspect
 import json
 import os
-from typing import Callable
-from typing import Union, Dict, List, Any
+import base64
+import re
+from typing import Callable, Union, Dict, List, Any
 import colorama
 import requests
 import threading
+import time
+import random
 from requests.exceptions import RequestException
 from pydantic import BaseModel
 from tools import TOOLS, validate_tool_call, tool_report_print
 import pickle
-import time
-import random
+from io import BytesIO
+from PIL import Image
 
 from colorama import Fore, Style
 from rich.console import Console, Group
@@ -51,6 +54,7 @@ class Assistant:
         self.available_functions = {func.__name__: func for func in tools}
         self.tools = list(map(function_to_json_schema, tools))
         self.current_tool_calls = []  # Track tool calls for the current request
+        self.image_data = []  # Track images in the current message
         
         # Streaming support
         self.stream_handler = stream_handler
@@ -73,25 +77,39 @@ class Assistant:
         self.console = Console()
         self.border_width = 100
     
-    def prepare_message(self, message):
+    def prepare_message(self, message, images=None):
         """
         Prepare to process a message in streaming mode.
         This starts a background thread for processing.
+        
+        Args:
+            message: The text message to send
+            images: Optional list of image data dictionaries
         """
         # Clear any previous tool calls and results
         self.current_tool_calls = []
         self._final_response = None
+        self.image_data = []
         
-        # Add user message
-        self.messages.append({"role": "user", "content": message})
+        # If images are provided, optimize and store them
+        if images:
+            self.image_data = self._optimize_images(images)
+            
+        # Add user message with content array if images exist
+        if self.image_data:
+            content = [{"type": "text", "text": message}]
+            content.extend(self.image_data)
+            self.messages.append({"role": "user", "content": content})
+        else:
+            # Add simple text message
+            self.messages.append({"role": "user", "content": message})
         
         # Start processing in a background thread
         self.is_processing = True
-        self._processing_thread = threading.Thread(target=self._process_message_thread)
-        self._processing_thread.start()
+        self._process_message_thread()  # Call directly instead of starting a thread for now
     
     def _process_message_thread(self):
-        """Background thread to process the message and execute tools."""
+        """Process the message and execute tools."""
         try:
             response = self.get_completion()
             result = self.__process_response(response)
@@ -105,28 +123,107 @@ class Assistant:
                 self._final_response = "Processing completed but no response was generated."
                 
         except Exception as e:
-            print(f"Error in processing thread: {e}")
+            print(f"Error in processing: {e}")
             self._final_response = f"Error during processing: {str(e)}"
         finally:
             self.is_processing = False
     
-    def get_current_tool_calls(self):
-        """Get the current state of tool calls for streaming."""
-        return self.current_tool_calls
+    def _optimize_images(self, images):
+        """Optimize images to reduce size and improve API response time"""
+        optimized_images = []
+        
+        for img_data in images:
+            try:
+                # Check if this is already a properly formatted image object
+                if isinstance(img_data, dict) and img_data.get("type") == "image_url":
+                    url = img_data.get("image_url", {}).get("url", "")
+                    
+                    # If it's a data URL, optimize it
+                    if url.startswith('data:image/'):
+                        # Extract image format and base64 data
+                        pattern = r'data:image/([a-zA-Z]+);base64,(.+)'
+                        match = re.match(pattern, url)
+                        
+                        if match:
+                            img_format, base64_data = match.groups()
+                            
+                            # Decode the base64 image
+                            img_bytes = base64.b64decode(base64_data)
+                            
+                            # Open image with PIL and resize/compress
+                            img = Image.open(BytesIO(img_bytes))
+                            
+                            # Set a maximum dimension (width or height)
+                            max_dimension = 800
+                            if max(img.width, img.height) > max_dimension:
+                                # Resize maintaining aspect ratio
+                                if img.width > img.height:
+                                    new_width = max_dimension
+                                    new_height = int(img.height * (max_dimension / img.width))
+                                else:
+                                    new_height = max_dimension
+                                    new_width = int(img.width * (max_dimension / img.height))
+                                
+                                img = img.resize((new_width, new_height), Image.LANCZOS)
+                            
+                            # Save the optimized image to a BytesIO object
+                            buffer = BytesIO()
+                            img.save(buffer, format=img_format.upper(), quality=75)  # Use higher quality for API accuracy
+                            
+                            # Convert back to base64
+                            optimized_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                            optimized_url = f"data:image/{img_format};base64,{optimized_base64}"
+                            
+                            # Create optimized image data dictionary
+                            optimized_images.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": optimized_url
+                                }
+                            })
+                        else:
+                            # If regex didn't match, use the original
+                            optimized_images.append(img_data)
+                    else:
+                        # If not a data URL, keep as is
+                        optimized_images.append(img_data)
+                else:
+                    # If not properly formatted, just pass it through
+                    optimized_images.append(img_data)
+            except Exception as e:
+                print(f"{Fore.RED}Error optimizing image: {e}{Style.RESET_ALL}")
+                # Still include the original image in case optimization fails
+                optimized_images.append(img_data)
+        
+        return optimized_images
     
-    def get_final_response(self):
-        """Get the final text response after all processing is complete."""
-        return self._final_response
-    
-    def send_message(self, message):
+    def send_message(self, message, images=None):
         """
         Send a message and get the response (non-streaming mode).
-        """
-        # Clear any previous tool calls
-        self.current_tool_calls = []
         
-        # Add user message and get completion
-        self.messages.append({"role": "user", "content": message})
+        Args:
+            message: The text message to send
+            images: Optional list of image data dictionaries with format:
+                   [{'type': 'image_url', 'image_url': {'url': image_url_or_base64}}]
+        """
+        # Clear any previous tool calls and image data
+        self.current_tool_calls = []
+        self.image_data = []
+        
+        # If images are provided, optimize and store them
+        if images:
+            self.image_data = self._optimize_images(images)
+        
+        # Prepare the content array if images are present
+        if self.image_data:
+            content = [{"type": "text", "text": message}]
+            content.extend(self.image_data)
+            # Add user message with content array
+            self.messages.append({"role": "user", "content": content})
+        else:
+            # Add simple text message
+            self.messages.append({"role": "user", "content": message})
+            
         response = self.get_completion()
         
         # Process the response and return both text and tool calls
@@ -210,11 +307,22 @@ class Assistant:
                 
                 if status_code == 429:
                     if attempt < retry_count:
+                        # Use more aggressive backoff for rate limit errors
                         retry_after = int(e.response.headers.get('Retry-After', 3))
-                        delay = max(retry_after, 3)
-                        print(f"{Fore.YELLOW}Rate limit hit. Retrying in {delay} seconds...{Style.RESET_ALL}")
+                        jitter = random.uniform(0, 2)  # Add jitter to avoid thundering herd
+                        delay = max(retry_after, 3) + jitter
+                        
+                        if self.image_data:  # If we're sending images, use even longer delays
+                            delay = delay * 2
+                            
+                        print(f"{Fore.YELLOW}Rate limit hit. Adding jitter and backing off more aggressively. Retrying in {delay:.1f} seconds...{Style.RESET_ALL}")
                         time.sleep(delay)
                         continue
+                    else:
+                        last_exception = e
+                        if self.image_data:
+                            msg = "Rate limit exceeded when processing images. Try reducing image size or waiting longer between requests."
+                            print(f"{Fore.RED}{msg}{Style.RESET_ALL}")
                 
                 elif status_code in [502, 503, 504]:
                     if attempt < retry_count:
@@ -496,6 +604,18 @@ class Assistant:
             if response_message not in self.messages:
                 self.messages.append(response_message)
             return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
+
+    def get_final_response(self):
+        """Get the final text response after all processing is complete."""
+        if hasattr(self, '_final_response') and self._final_response is not None:
+            return self._final_response
+        # Fallback in case _final_response isn't set yet
+        if self.messages and len(self.messages) > 0:
+            # Try to get the last assistant message
+            for msg in reversed(self.messages):
+                if msg.get("role") == "assistant" and "content" in msg:
+                    return msg["content"]
+        return "Processing completed but no response was generated."
 
 
 if __name__ == "__main__":
