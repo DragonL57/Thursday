@@ -29,7 +29,7 @@ A short disclaimer: this was originally made to be my personal assistant so it m
 ### Prerequisites
 
 - Python 3.11 or higher
-- uv (for dependency management) - [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
+- pip or uv for package management
 - An internet connection (for Pollinations AI access)
 
 ### Installation
@@ -41,35 +41,53 @@ git clone https://github.com/DragonL57/Thursday.git
 cd Thursday
 ```
 
-2. Install dependencies using uv:
-
-This will create venv if it doesn't exist
+2. Install dependencies using pip or uv:
 
 ```bash
+# Using pip
+pip install -r requirements.txt
+
+# OR using uv
 uv sync
 ```
 
-### Usage
+### Quick Start
+
+The easiest way to run Thursday is using the `run.py` script, which gives you options to launch either interface:
+
+```bash
+python run.py
+```
+
+This will present an interactive menu to choose between the web or terminal interface.
+
+You can also directly specify which interface to launch:
+
+```bash
+# Launch the web interface
+python run.py web
+
+# Launch the terminal interface
+python run.py terminal
+```
+
+### Manual Usage
+
+If you prefer to run the interfaces directly:
 
 #### Terminal Interface
-
-Run the `assistant.py` script to start the chat interface:
 
 ```bash
 uv run assistant.py
 ```
 
-You can then interact with Thursday by typing commands in the chat. Type `exit`, `quit`, or `bye` to close the chat.
-
 #### Web Interface
-
-Run the `app.py` script to start the web server:
 
 ```bash
 uv run app.py
 ```
 
-Then open your browser and navigate to `http://localhost:5000` to interact with Thursday via the web interface.
+Then open your browser and navigate to `http://localhost:5000`.
 
 ## Tools
 
