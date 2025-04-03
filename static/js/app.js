@@ -51,13 +51,33 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => {
                 try {
                     if (typeof renderMathInElement === 'function') {
+                        // Add more restrictive configuration to avoid false positives
                         renderMathInElement(messageElement, {
                             delimiters: [
                                 {left: '$$', right: '$$', display: true},
                                 {left: '$', right: '$', display: false},
-                                {left: '[', right: ']', display: true} // Add square brackets support
+                                // Be more specific about square bracket math to avoid capturing citations
+                                {left: '[\\n\\s]*', right: '[\\n\\s]*', display: true}
                             ],
-                            throwOnError: false
+                            ignoredTags: [
+                                'a', 'script', 'noscript', 'style', 'textarea', 'pre',
+                                'code', 'annotation', 'annotation-xml', 'cite', 'span'
+                            ],
+                            throwOnError: false,
+                            strict: false,
+                            // Don't process text that looks like a citation or URL
+                            trust: (context) => {
+                                const text = context.text;
+                                // Skip processing if it looks like a citation or URL
+                                if (/(Source:|http|www|\.com|\.org|\.net)/.test(text)) {
+                                    return false;
+                                }
+                                // Also skip if it contains newlines with single letters (formatted citations)
+                                if (/\n[A-Za-z]\n[A-Za-z]\n/.test(text)) {
+                                    return false;
+                                }
+                                return true;
+                            }
                         });
                     }
                 } catch (e) {

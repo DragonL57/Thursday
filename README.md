@@ -90,6 +90,20 @@ Thursday comes with a set of built-in tools that you can use in your conversatio
 
 **And much more!**
 
+## LaTeX Support
+
+Thursday supports rendering LaTeX mathematical expressions in conversations. You can use the following formats:
+
+- Inline math: Use `$...$` for inline equations (e.g., $E=mc^2$)
+- Block math: Use `$$...$$` for displayed equations (e.g., $$E=mc^2$$)
+- Alternative block math: Use `[...]` for displayed equations when appropriate (e.g., [E=mc^2])
+
+Note: 
+1. For inline math with single `$` delimiters, avoid spaces immediately after the opening delimiter and immediately before the closing delimiter to ensure proper rendering.
+2. Markdown links in the format `[text](url)` will be properly rendered as links and not as LaTeX equations.
+3. Source citations with text inside square brackets followed by URLs will be rendered as text rather than equations.
+4. If you need to include square brackets for non-LaTeX purposes, consider using markdown link syntax or adding some contextual text like "Source:" nearby.
+
 ## Testing
 To run tests, use:
 ```bash

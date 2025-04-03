@@ -21,21 +21,58 @@ export function setupMarkdown() {
                     </div>
                 `;
             },
-            // Add custom handling for paragraphs to preserve LaTeX delimiters
+            // Improve paragraph handling to preserve LaTeX delimiters
             paragraph(text) {
+                // Make sure we don't interfere with LaTeX delimiters
                 return `<p>${text}</p>`;
+            },
+            // Override link renderer to ensure proper rendering
+            link(href, title, text) {
+                const titleAttr = title ? ` title="${title}"` : '';
+                return `<a href="${href}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
             }
         },
         extensions: [{
             name: 'latex',
             level: 'inline',
             start(src) { 
+                const dollarIndex = src.indexOf('$');
+                
+                // More aggressive link detection - check for common source patterns
+                // This will detect both standard links and citation-style patterns
+                const isLikelyLink = /^\[.*?\](\(.*?\)|:)/.test(src) || 
+                                    /^Source:/.test(src) || 
+                                    /(https?:\/\/|www\.)/.test(src.split('\n')[0]);
+                                    
+                // Only consider square brackets if they're not likely part of a citation or link
+                const bracketIndex = isLikelyLink ? -1 : src.indexOf('[');
+                
+                if (dollarIndex === -1 && bracketIndex === -1) return Infinity;
+                
                 return Math.min(
-                    src.indexOf('$') !== -1 ? src.indexOf('$') : Infinity,
-                    src.indexOf('[') !== -1 ? src.indexOf('[') : Infinity
+                    dollarIndex !== -1 ? dollarIndex : Infinity,
+                    bracketIndex !== -1 ? bracketIndex : Infinity
                 );
             },
             tokenizer(src) {
+                // Enhanced link detection pattern - check for multiple formats
+                // This detects standard markdown links, citations, and source references
+                if (/^\[.*?\](\(.*?\)|:)/.test(src) || 
+                    /^Source:/.test(src) || 
+                    /(https?:\/\/|www\.)/.test(src.split('\n')[0])) {
+                    return false; // Let standard Markdown handle these
+                }
+                
+                // Detect and skip source-style formatting with letters on separate lines
+                // Look for patterns like single letters on separate lines followed by a URL
+                if (/^[A-Za-z]\n[A-Za-z]\n[A-Za-z]/.test(src)) {
+                    // Check if there's a URL pattern within the next few lines
+                    const nextFewLines = src.split('\n').slice(0, 10).join('\n');
+                    if (/(https?:\/\/|www\.)/.test(nextFewLines)) {
+                        return false; // This looks like a source citation, not LaTeX
+                    }
+                }
+                
                 // Block LaTeX with $$ delimiters
                 const blockMatch = /^\$\$([\s\S]+?)\$\$/.exec(src);
                 if (blockMatch) {
@@ -47,19 +84,28 @@ export function setupMarkdown() {
                     };
                 }
                 
-                // Block LaTeX with square brackets
-                const blockBracketMatch = /^\[([\s\S]+?)\]/.exec(src);
+                // Block LaTeX with square brackets - with enhanced checks
+                // Only treat as LaTeX if:
+                // 1. Not followed by parentheses or colon (markdown link or citation)
+                // 2. Not part of a URL reference
+                // 3. Not surrounded by typical citation/source text
+                const blockBracketMatch = /^\[([\s\S]+?)\](?![\(:])/.exec(src);
                 if (blockBracketMatch) {
-                    return {
-                        type: 'latex',
-                        raw: blockBracketMatch[0],
-                        text: blockBracketMatch[1].trim(),
-                        displayMode: true
-                    };
+                    // Additional check - look for URL-like patterns around this match
+                    const context = src.substring(0, blockBracketMatch.index + blockBracketMatch[0].length + 30);
+                    if (!/(Source|http|www|\.com|\.org|\.net)/.test(context)) {
+                        return {
+                            type: 'latex',
+                            raw: blockBracketMatch[0],
+                            text: blockBracketMatch[1].trim(),
+                            displayMode: true
+                        };
+                    }
+                    return false;
                 }
                 
-                // Inline LaTeX with $ delimiters
-                const inlineMatch = /^\$([^\$]+?)\$/.exec(src);
+                // Inline LaTeX with $ delimiters (must not have spaces after opening and before closing)
+                const inlineMatch = /^\$([^\$\s][^\$]*?[^\$\s])\$/.exec(src) || /^\$([^\$])\$/.exec(src);
                 if (inlineMatch) {
                     return {
                         type: 'latex',
@@ -73,19 +119,22 @@ export function setupMarkdown() {
             },
             renderer(token) {
                 try {
+                    // Use KaTeX to render LaTeX expressions
                     return katex.renderToString(token.text, {
                         displayMode: token.displayMode,
-                        throwOnError: false
+                        throwOnError: false,
+                        strict: false // Allow for more forgiving LaTeX parsing
                     });
                 } catch (e) {
                     console.error('LaTeX rendering error:', e);
-                    return token.raw; // Return the original LaTeX code on error
+                    // Return escaped text on error so it's clear what went wrong
+                    return `<span class="latex-error" title="${e.message}">${token.raw}</span>`;
                 }
             }
         }]
     });
     
-    // Ensure KaTeX auto-render is available
+    // Ensure KaTeX auto-render is available and correctly configured
     if (typeof renderMathInElement === 'undefined') {
         window.addEventListener('load', initKaTeXAutoRender);
     } else {
@@ -102,9 +151,10 @@ function initKaTeXAutoRender() {
             delimiters: [
                 {left: '$$', right: '$$', display: true},
                 {left: '$', right: '$', display: false},
-                {left: '[', right: ']', display: true}  // Add square brackets as delimiters
+                {left: '[', right: ']', display: true}
             ],
-            throwOnError: false
+            throwOnError: false,
+            strict: false // Be more forgiving in parsing
         });
     } else {
         console.warn('KaTeX auto-render not available yet');
