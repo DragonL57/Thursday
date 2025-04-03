@@ -34,8 +34,8 @@ A short disclaimer this was originally made to be my personal assistant so it mi
 1.  Clone the repository:
 
 ```bash
-git clone https://github.com/DragonL57/personal-gem.git thursday # Cloning into a 'thursday' directory
-cd thursday
+git clone https://github.com/DragonL57/Thursday.git 
+cd Thursday
 ```
 
 2.  Install dependencies using uv:
