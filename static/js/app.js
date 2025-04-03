@@ -42,6 +42,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarManager = new SidebarManager(elements.toggleSidebarButton, elements.sidebar);
     const settingsManager = new SettingsManager(elements, messagingComponent);
     
+    // After a new message is added to the DOM, render any LaTeX in it
+    const originalAddMessage = MessagingComponent.prototype.addMessage;
+    MessagingComponent.prototype.addMessage = function(message, isUser = false) {
+        const messageElement = originalAddMessage.call(this, message, isUser);
+        if (messageElement) {
+            // Wait a bit to ensure content is fully rendered
+            setTimeout(() => {
+                try {
+                    if (typeof renderMathInElement === 'function') {
+                        renderMathInElement(messageElement, {
+                            delimiters: [
+                                {left: '$$', right: '$$', display: true},
+                                {left: '$', right: '$', display: false},
+                                {left: '[', right: ']', display: true} // Add square brackets support
+                            ],
+                            throwOnError: false
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error rendering LaTeX:', e);
+                }
+            }, 100);
+        }
+        return messageElement;
+    };
+    
     // Set up input handling events
     elements.userInput.addEventListener('input', () => {
         adjustTextareaHeight(elements.userInput, elements.sendButton);
