@@ -10,27 +10,128 @@ export class MessagingComponent {
         this.loadingIndicator = elements.loadingIndicator;
         this.isProcessing = false;
         
+        // Track image attachments
+        this.currentImageData = null;
+        this.imagePreviewContainer = elements.imagePreviewContainer || document.getElementById('imagePreviewContainer');
+        
         this.initEvents();
     }
     
     initEvents() {
+        // Existing form submission handler
         this.messageForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = this.userInput.value.trim();
-            if (message && !this.isProcessing) {
+            if ((message || this.currentImageData) && !this.isProcessing) {
                 await this.sendMessage(message);
             }
         });
+        
+        // Add paste event listener to the textarea
+        this.userInput.addEventListener('paste', (e) => {
+            this.handlePaste(e);
+        });
+        
+        // Add handler for image preview clear button if it exists
+        if (this.imagePreviewContainer) {
+            this.imagePreviewContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove-image')) {
+                    this.clearImageAttachment();
+                }
+            });
+        }
+    }
+    
+    // Handle paste events to capture images
+    handlePaste(e) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        
+        // Look for image items in the clipboard
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                // Convert the image to a File object
+                const file = items[i].getAsFile();
+                if (file) {
+                    this.processImageFile(file);
+                    // Prevent the image from being pasted as a blob URL
+                    e.preventDefault();
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Process an image file and show preview
+    processImageFile(file) {
+        // Add size validation
+        if (file.size > 4 * 1024 * 1024) { // 4MB limit
+            this.addMessage("Image is too large. Please use an image smaller than 4MB.", false);
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            this.currentImageData = dataUrl;
+            this.showImagePreview(dataUrl);
+            
+            // Enable send button even if text is empty
+            this.sendButton.disabled = false;
+            
+            // Show a helpful message about image size
+            if (file.size > 1 * 1024 * 1024) { // If larger than 1MB
+                const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
+                const imageResizeNotice = document.createElement('div');
+                imageResizeNotice.className = 'image-notice';
+                imageResizeNotice.textContent = `Image size: ${sizeInMB}MB - Large images may take longer to process.`;
+                this.imagePreviewContainer.appendChild(imageResizeNotice);
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    // Show image preview in the UI
+    showImagePreview(dataUrl) {
+        if (!this.imagePreviewContainer) {
+            // If the preview container doesn't exist, create it
+            this.imagePreviewContainer = document.createElement('div');
+            this.imagePreviewContainer.id = 'imagePreviewContainer';
+            this.imagePreviewContainer.className = 'image-preview-container';
+            this.messageForm.querySelector('.input-wrapper').appendChild(this.imagePreviewContainer);
+        }
+        
+        this.imagePreviewContainer.innerHTML = `
+            <div class="image-preview">
+                <img src="${dataUrl}" alt="Image preview">
+                <button type="button" class="remove-image">&times;</button>
+            </div>
+        `;
+        this.imagePreviewContainer.classList.remove('hidden');
+    }
+    
+    // Clear the current image attachment
+    clearImageAttachment() {
+        this.currentImageData = null;
+        if (this.imagePreviewContainer) {
+            this.imagePreviewContainer.innerHTML = '';
+            this.imagePreviewContainer.classList.add('hidden');
+        }
+        
+        // Disable send button if text is also empty
+        if (!this.userInput.value.trim()) {
+            this.sendButton.disabled = true;
+        }
     }
     
     // Add message to the UI
-    addMessage(content, isUser = false) {
+    addMessage(content, isUser = false, hasImage = false) {
         const messageGroup = document.createElement('div');
         messageGroup.className = isUser ? 'message-group user-message' : 'message-group assistant-message';
         
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
-        messageGroup.innerHTML = `
+        let messageHTML = `
             <div class="message-avatar">
                 <span class="avatar-icon">${isUser ? '👤' : '🗓️'}</span>
             </div>
@@ -39,16 +140,43 @@ export class MessagingComponent {
                     <span class="message-sender">${isUser ? 'You' : 'Thursday'}</span>
                     <span class="message-time">${time}</span>
                 </div>
-                <div class="message-bubble"></div>
-            </div>
+                <div class="message-bubble">
         `;
         
+        // Add image if exists
+        if (isUser && hasImage && this.currentImageData) {
+            messageHTML += `
+                <div class="message-image">
+                    <img src="${this.currentImageData}" alt="Attached image" loading="lazy">
+                </div>
+            `;
+        }
+        
+        // Close message bubble div
+        messageHTML += `</div></div>`;
+        
+        messageGroup.innerHTML = messageHTML;
+        
         const messageBubble = messageGroup.querySelector('.message-bubble');
+        
+        // Add the text content
         if (isUser) {
-            messageBubble.textContent = content;
+            // For user messages, we add a text paragraph if there's content
+            if (content) {
+                const textParagraph = document.createElement('p');
+                textParagraph.textContent = content;
+                
+                // If there's an image, insert the text before it
+                const imageElement = messageBubble.querySelector('.message-image');
+                if (imageElement) {
+                    messageBubble.insertBefore(textParagraph, imageElement);
+                } else {
+                    messageBubble.appendChild(textParagraph);
+                }
+            }
         } else {
-            // Render markdown for assistant messages
-            messageBubble.innerHTML = marked.parse(content);
+            // For assistant messages, render markdown
+            messageBubble.innerHTML += marked.parse(content);
             
             // Render LaTeX within the newly added message
             renderMathInElement(messageBubble, {
@@ -215,11 +343,20 @@ export class MessagingComponent {
     
     // Send message to API and handle response
     async sendMessage(message) {
-        if (this.isProcessing || !message.trim()) return;
+        if (this.isProcessing) return;
         
-        // Add user message to UI
-        this.addMessage(message, true);
+        // Check if we have either a message or an image
+        if (!message.trim() && !this.currentImageData) return;
+        
+        // Add user message to UI with image if present
+        this.addMessage(message, true, !!this.currentImageData);
+        
+        // Store image data before clearing it
+        const imageData = this.currentImageData;
+        
+        // Reset UI state
         this.userInput.value = '';
+        this.clearImageAttachment();
         
         // Trigger input event to adjust textarea height and disable send button
         this.userInput.dispatchEvent(new Event('input'));
@@ -230,7 +367,7 @@ export class MessagingComponent {
         
         try {
             // Use streaming API with callbacks for real-time updates
-            await streamChatMessage(message, {
+            await streamChatMessage(message, imageData, {
                 // Called when a new tool call is detected
                 onToolCall: (toolCall) => {
                     this.addToolCallMessage(toolCall);
@@ -251,7 +388,13 @@ export class MessagingComponent {
                 // Called on error
                 onError: (error) => {
                     console.error('Error during streaming:', error);
-                    this.addMessage(`Error: ${error}`, false);
+                    
+                    // Show a more helpful message for rate limit errors
+                    if (error.toLowerCase().includes('rate limit')) {
+                        this.addMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.", false);
+                    } else {
+                        this.addMessage(`Error: ${error}`, false);
+                    }
                 },
                 
                 // Called when the stream is complete
@@ -265,7 +408,13 @@ export class MessagingComponent {
             console.error('Error:', error);
             this.loadingIndicator.classList.add('hidden');
             this.isProcessing = false;
-            this.addMessage('Sorry, there was an error processing your request. Please try again.');
+            
+            // Show a more helpful message for rate limit errors
+            if (error.toString().toLowerCase().includes('rate limit')) {
+                this.addMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.", false);
+            } else {
+                this.addMessage('Sorry, there was an error processing your request. Please try again.');
+            }
         }
     }
     

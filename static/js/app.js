@@ -30,7 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
         modelSelect: document.getElementById('modelSelect'),
         saveChatHistory: document.getElementById('saveChatHistory'),
         sidebar: document.querySelector('.sidebar'),
-        suggestionChips: document.querySelectorAll('.chip')
+        suggestionChips: document.querySelectorAll('.chip'),
+        attachButton: document.getElementById('attachButton')
     };
     
     // Ensure loading indicator is hidden on page load
@@ -42,6 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const sidebarManager = new SidebarManager(elements.toggleSidebarButton, elements.sidebar);
     const settingsManager = new SettingsManager(elements, messagingComponent);
     
+    // Expose messaging component globally so attachButton can access it
+    window.messagingComponent = messagingComponent;
+
     // After a new message is added to the DOM, render any LaTeX in it and highlight code
     const originalAddMessage = MessagingComponent.prototype.addMessage;
     MessagingComponent.prototype.addMessage = function(message, isUser = false, toolCalls = []) {
@@ -137,6 +141,34 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.userInput.value = chip.textContent;
             adjustTextareaHeight(elements.userInput, elements.sendButton);
             elements.sendButton.disabled = false;
+        });
+    });
+
+    // Add file upload support
+    elements.attachButton.addEventListener('click', () => {
+        // Create a hidden file input element
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+        
+        // Trigger file dialog
+        fileInput.click();
+        
+        // Handle selected file
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files && fileInput.files[0]) {
+                // Get the messaging component
+                const messagingComponent = window.messagingComponent;
+                
+                if (messagingComponent) {
+                    messagingComponent.processImageFile(fileInput.files[0]);
+                }
+            }
+            
+            // Remove the file input element
+            document.body.removeChild(fileInput);
         });
     });
     

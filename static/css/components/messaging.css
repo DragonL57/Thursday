@@ -506,15 +506,84 @@
 
 /* Image input and preview styles */
 .image-preview-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    max-height: 150px;
+    overflow-y: auto;
 }
 
-/* Add styles for the image size notice */
-.image-notice {
-    font-size: 0.75rem;
-    color: var(--text-tertiary);
-    padding: 0.25rem 0.5rem;
-    margin-top: 0.25rem;
-    background-color: rgba(0, 0, 0, 0.05);
+.image-preview-container.hidden {
+    display: none;
+}
+
+.image-preview {
+    position: relative;
+    width: 80px;
+    height: 80px;
     border-radius: var(--border-radius);
-    display: inline-block;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.remove-image {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 20px;
+    height: 20px;
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    line-height: 1;
+}
+
+.remove-image:hover {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+/* Message image display */
+.message-image {
+    margin: 0.5rem 0;
+    max-height: 300px;
+    overflow: hidden;
+    border-radius: var(--border-radius);
+}
+
+.message-image img {
+    max-width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+}
+
+.user-message .message-image {
+    max-width: 200px;
+}
+
+/* Image attachment notification in input */
+.image-notification {
+    display: flex;
+    align-items: center;
+    color: var(--primary-color);
+    font-size: 0.8rem;
+    padding: 0.25rem 0;
+}
+
+.image-notification .material-icons-round {
+    font-size: 1rem;
+    margin-right: 0.25rem;
 }

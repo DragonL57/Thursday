@@ -5,6 +5,8 @@ from assistant import Assistant  # Import the Assistant class
 import os
 import json
 import time
+import base64
+import re
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secure secret key for session management
@@ -42,9 +44,11 @@ def chat_stream():
         return jsonify({"error": "Assistant not initialized"}), 500
 
     try:
-        user_message = request.json.get('message')
-        if not user_message:
-            return jsonify({"error": "No message provided"}), 400
+        user_message = request.json.get('message', '')
+        image_data = request.json.get('imageData')
+        
+        if not user_message and not image_data:
+            return jsonify({"error": "No message or image provided"}), 400
 
         # Get session ID (or client IP if no session available)
         session_id = session.get('user_id', request.remote_addr)
@@ -60,32 +64,108 @@ def chat_stream():
         
         user_assistant = assistants[session_id]
 
+        # Prepare image data if provided
+        images = None
+        if image_data:
+            # Check if it's already in the right format (dataURL)
+            if isinstance(image_data, str) and image_data.startswith('data:image/'):
+                # Create the content array format required by the API
+                images = [{
+                    "type": "image_url",
+                    "image_url": {
+                        "url": image_data
+                    }
+                }]
+            else:
+                # Try to format it as base64 if it's not already
+                match = re.match(r'^data:image/([a-zA-Z]+);base64,(.+)$', image_data) if isinstance(image_data, str) else None
+                if not match:
+                    # If no match, assume it's just a base64 string
+                    image_format = 'jpeg'  # default format
+                    base64_data = image_data
+                    image_url = f"data:image/{image_format};base64,{base64_data}"
+                    images = [{
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_url
+                        }
+                    }]
+                else:
+                    # It's already a proper data URL
+                    images = [{
+                        "type": "image_url",
+                        "image_url": {
+                            "url": image_data
+                        }
+                    }]
+
         def generate():
-            # Start processing and track tool calls
-            user_assistant.prepare_message(user_message)
-            
             # Send an event indicating the start of processing
             yield f"data: {json.dumps({'event': 'start'})}\n\n"
             
-            # Stream tool calls as they are executed
-            tool_calls_seen = set()
-            while user_assistant.is_processing:
-                current_tools = user_assistant.get_current_tool_calls()
-                for tool_call in current_tools:
-                    tool_id = tool_call.get('id')
-                    if tool_id and tool_id not in tool_calls_seen:
-                        # New tool call
-                        yield f"data: {json.dumps({'event': 'tool_call', 'data': tool_call})}\n\n"
-                        tool_calls_seen.add(tool_id)
-                    elif tool_id in tool_calls_seen:
-                        # Tool call was updated
-                        yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n"
+            try:
+                # Start processing and track tool calls
+                user_assistant.prepare_message(user_message, images)
                 
-                time.sleep(0.1)  # Short sleep to avoid CPU thrashing
+                # Stream tool calls as they are executed
+                tool_calls_seen = set()
+                max_wait_time = 60  # Maximum wait time in seconds
+                start_time = time.time()
+                
+                while user_assistant.is_processing and (time.time() - start_time < max_wait_time):
+                    try:
+                        current_tools = user_assistant.get_current_tool_calls()
+                        for tool_call in current_tools:
+                            tool_id = tool_call.get('id')
+                            if tool_id and tool_id not in tool_calls_seen:
+                                # New tool call
+                                yield f"data: {json.dumps({'event': 'tool_call', 'data': tool_call})}\n\n"
+                                tool_calls_seen.add(tool_id)
+                            elif tool_id in tool_calls_seen:
+                                # Tool call was updated
+                                yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n"
+                    except Exception as tool_err:
+                        print(f"Error processing tool calls: {tool_err}")
+                    
+                    time.sleep(0.1)  # Short sleep to avoid CPU thrashing
+                
+                # Get the final response after all tools have been executed
+                try:
+                    final_response = user_assistant.get_final_response()
+                except AttributeError:
+                    # Handle the case where get_final_response isn't defined
+                    final_response = "Sorry, there was a problem retrieving the final response."
+                    if hasattr(user_assistant, 'messages') and user_assistant.messages:
+                        # Try to get the last assistant message as fallback
+                        for msg in reversed(user_assistant.messages):
+                            if isinstance(msg, dict) and msg.get("role") == "assistant" and "content" in msg:
+                                final_response = msg["content"]
+                                break
+                
+                # Check if we timed out
+                if time.time() - start_time >= max_wait_time:
+                    timeout_msg = "Request processing took too long. Please try again with a simpler request or smaller image."
+                    yield f"data: {json.dumps({'event': 'error', 'data': timeout_msg})}\n\n"
+                # Check if the response contains an error message about rate limits
+                elif isinstance(final_response, str) and "rate limit" in final_response.lower():
+                    # Send a more user-friendly rate limit error
+                    error_msg = "The image processing request was rate limited. Please try again in a few minutes or use a smaller image."
+                    yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n"
+                else:
+                    # Send the final response
+                    yield f"data: {json.dumps({'event': 'final', 'data': final_response})}\n\n"
+                
+            except Exception as e:
+                error_message = str(e)
+                if "429" in error_message or "rate limit" in error_message.lower():
+                    user_friendly_error = "Rate limit exceeded. Please try again in a few minutes or use a smaller image."
+                    yield f"data: {json.dumps({'event': 'error', 'data': user_friendly_error})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n"
             
-            # Get the final response after all tools have been executed
-            final_response = user_assistant.get_final_response()
-            yield f"data: {json.dumps({'event': 'final', 'data': final_response})}\n\n"
+            # Make sure user_assistant.is_processing is set to False in case of exceptions
+            if hasattr(user_assistant, 'is_processing'):
+                user_assistant.is_processing = False
             
             # Send end of stream
             yield f"data: {json.dumps({'event': 'done'})}\n\n"
@@ -95,10 +175,18 @@ def chat_stream():
     except Exception as e:
         print(f"Error during chat streaming: {e}")
         # Return error as a stream event
-        return Response(
-            f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n",
-            mimetype='text/event-stream'
-        )
+        error_message = str(e)
+        if "429" in error_message or "rate limit" in error_message.lower():
+            user_friendly_error = "Rate limit exceeded. Please try again in a few minutes or use a smaller image."
+            return Response(
+                f"data: {json.dumps({'event': 'error', 'data': user_friendly_error})}\n\n",
+                mimetype='text/event-stream'
+            )
+        else:
+            return Response(
+                f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n",
+                mimetype='text/event-stream'
+            )
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -108,8 +196,10 @@ def chat():
 
     try:
         user_message = request.json.get('message')
-        if not user_message:
-            return jsonify({"error": "No message provided"}), 400
+        image_data = request.json.get('imageData')
+        
+        if not user_message and not image_data:
+            return jsonify({"error": "No message or image provided"}), 400
 
         # Get session ID (or client IP if no session available)
         session_id = session.get('user_id', request.remote_addr)
@@ -123,9 +213,20 @@ def chat():
             )
         
         user_assistant = assistants[session_id]
+        
+        # Prepare image data if provided
+        images = None
+        if image_data:
+            # Create the content array format required by the API
+            images = [{
+                "type": "image_url",
+                "image_url": {
+                    "url": image_data
+                }
+            }]
 
         # Send message to the assistant and get the response
-        assistant_response = user_assistant.send_message(user_message)
+        assistant_response = user_assistant.send_message(user_message, images)
         
         # Format response for the client
         if isinstance(assistant_response, dict) and "text" in assistant_response:
