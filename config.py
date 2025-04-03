@@ -15,7 +15,7 @@ import requests
 # Not every model supports tool calling so some might throw errors
 # Here you can find all the supported provider: https://docs.litellm.ai/docs/providers/
 
-MODEL = "gemini/gemini-2.0-flash"
+MODEL = "openai-large" # Changed to Pollinations AI compatible model
 
 # The assistants name
 NAME = "Gemini"
@@ -33,26 +33,7 @@ SEED = None
 CLEAR_BEFORE_START = True
 
 
-# Gemini safety settings
-SAFETY_SETTINGS = [
-    {
-        "category": "HARM_CATEGORY_HARASSMENT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_HATE_SPEECH",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-        "threshold": "BLOCK_NONE",
-    },
-    {
-        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-        "threshold": "BLOCK_NONE",
-    },
-]
-
+# SAFETY_SETTINGS removed as it's specific to Gemini/LiteLLM
 
 def get_location_info():
     try:

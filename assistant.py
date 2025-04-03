@@ -4,11 +4,12 @@ import os
 from typing import Callable
 from typing import Union
 import colorama
+import requests # Added for API calls
 from pydantic import BaseModel
-import litellm
+# Removed litellm import
 from tools import TOOLS, validate_tool_call, tool_report_print # Updated imports
 import pickle
-from litellm.exceptions import RateLimitError
+# Removed litellm exception import, will use requests exceptions
 
 from colorama import Fore, Style
 from rich.console import Console, Group
@@ -29,7 +30,7 @@ import gem
 from dotenv import load_dotenv
 
 load_dotenv()
-litellm.suppress_debug_info = True
+# Removed litellm debug suppression
 
 
 class Assistant:
@@ -108,17 +109,40 @@ class Assistant:
         print(f"{Fore.YELLOW}└{'─' * self.border_width}┘{Style.RESET_ALL}")
 
     def get_completion(self):
-        """Get a completion from the model with the current messages and tools."""
-        return litellm.completion(
-            model=self.model,
-            messages=self.messages,
-            tools=self.tools,
-            temperature=conf.TEMPERATURE,
-            top_p=conf.TOP_P,
-            max_tokens=conf.MAX_TOKENS,
-            seed=conf.SEED,
-            safety_settings=conf.SAFETY_SETTINGS
-        )
+        """Get a completion from the Pollinations AI model with the current messages and tools."""
+        api_url = "https://text.pollinations.ai/openai" # Pollinations API endpoint
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "model": self.model,
+            "messages": self.messages,
+            "tools": self.tools,
+            "temperature": conf.TEMPERATURE,
+            "top_p": conf.TOP_P,
+            "max_tokens": conf.MAX_TOKENS,
+            "seed": conf.SEED,
+            # No safety_settings for Pollinations
+        }
+        # Filter out None values from payload, as API might not like null values for optional params
+        payload = {k: v for k, v in payload.items() if v is not None}
+
+        try:
+            response = requests.post(api_url, headers=headers, json=payload, timeout=60) # Added timeout
+            response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
+            return response.json() # Return the JSON response
+        except requests.exceptions.HTTPError as http_err:
+            if response.status_code == 429:
+                print(f"{Fore.RED}Rate limit exceeded. Please wait and try again.{Style.RESET_ALL}")
+                # Re-raise or handle specific rate limit logic if needed
+                raise ConnectionError("Rate limit exceeded") # Use a generic exception type or define a custom one
+            else:
+                print(f"{Fore.RED}HTTP error occurred: {http_err} - {response.text}{Style.RESET_ALL}")
+                raise # Re-raise other HTTP errors
+        except requests.exceptions.RequestException as req_err:
+            print(f"{Fore.RED}Error during API request: {req_err}{Style.RESET_ALL}")
+            raise # Re-raise other request errors
+        except json.JSONDecodeError as json_err:
+            print(f"{Fore.RED}Error decoding API response: {json_err} - Response: {response.text}{Style.RESET_ALL}")
+            raise # Re-raise JSON errors
 
     def add_msg_assistant(self, msg: str):
         self.messages.append({"role": "assistant", "content": msg})
@@ -222,18 +246,34 @@ class Assistant:
                 }
         return arg_value
 
-    def __process_response(self, response, print_response=True, validation_retries=2): # Added retry counter
-        response_message = response.choices[0].message
-        # Avoid appending the message immediately if it might be replaced by a corrected one
-        # self.messages.append(response_message) # Moved appending logic
+    def __process_response(self, response_json, print_response=True, validation_retries=2): # Added retry counter
+        # Parse the response structure from requests.json()
+        # Assuming OpenAI compatible structure: {'choices': [{'message': {...}}]}
+        if not response_json or "choices" not in response_json or not response_json["choices"]:
+             print(f"{Fore.RED}Error: Invalid response format from API: {response_json}{Style.RESET_ALL}")
+             # Return a dummy structure or raise an error to prevent downstream crashes
+             return {"role": "assistant", "content": "Error: Received invalid response from API."} # Provide a basic message object
 
-        tool_calls = response_message.tool_calls
+        # Convert the dict to a more object-like structure if needed, or access via keys
+        # For simplicity, we'll access via keys. If complex logic relies on attribute access,
+        # consider converting to a SimpleNamespace or a custom class.
+        response_message = response_json["choices"][0]["message"] # This is now a dict
 
+        # tool_calls might be missing if no tools were called
+        tool_calls_raw = response_message.get("tool_calls") # Use .get() for safety
+
+        # Process tool_calls if present
+        tool_calls = []
+        if tool_calls_raw:
+             # Convert the raw tool call dicts if necessary, or use them directly
+             # Assuming the structure matches: [{'id': '...', 'type': 'function', 'function': {'name': '...', 'arguments': '...'}}]
+             tool_calls = tool_calls_raw # Use the list of dicts directly
         if tool_calls:
             # Only append the assistant message containing tool calls *if* we intend to process them
             # If all fail validation and retries are exhausted, we might not want this in history.
             # Let's append it for now, assuming corrections will build upon it.
             if response_message not in self.messages: # Avoid duplicates during recursion
+                 # response_message is already a dict, suitable for appending
                  self.messages.append(response_message)
 
             needs_correction_reprompt = False
@@ -241,27 +281,31 @@ class Assistant:
             tool_errors = [] # Store errors for potential reprompt
 
             for tool_call in tool_calls:
-                function_name = tool_call.function.name
+                # Access tool call info via dict keys
+                function_name = tool_call['function']['name']
+                tool_id = tool_call['id'] # Get the tool_call_id
                 function_to_call = self.available_functions.get(function_name)
 
                 if function_to_call is None:
                     err_msg = f"Function not found with name: {function_name}"
                     print(f"{Fore.RED}Error: {err_msg}{Style.RESET_ALL}")
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    tool_errors.append((tool_id, function_name, err_msg)) # Store error
                     needs_correction_reprompt = True
                     continue
 
                 try: # Wrap parsing, validation, and execution attempt
-                    function_args = json.loads(tool_call.function.arguments)
+                    # Access arguments via dict key
+                    function_args_str = tool_call['function']['arguments']
+                    function_args = json.loads(function_args_str)
 
                     # <<< VALIDATION STEP >>>
                     is_valid, validation_error = validate_tool_call(function_name, function_args)
                     if not is_valid:
                         err_msg = f"Tool call validation failed: {validation_error}. Please correct the parameters."
                         tool_report_print("Validation Error:", f"Tool call '{function_name}'. Reason: {validation_error}", is_error=True)
-                        self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                        tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                        self.add_toolcall_output(tool_id, function_name, err_msg)
+                        tool_errors.append((tool_id, function_name, err_msg)) # Store error
                         needs_correction_reprompt = True
                         continue # Skip executing this invalid call
 
@@ -277,29 +321,29 @@ class Assistant:
                     function_response = function_to_call(**converted_args)
 
                     # Print intermediate assistant message if it existed before the tool call
-                    if response_message.content:
-                         # Avoid printing duplicate messages during recursive calls
+                    # Check content key in the response_message dict
+                    if response_message.get("content"):
                          pass # Let final text print at the end
 
                     # Add successful tool output to history
                     self.add_toolcall_output(
-                        tool_call.id, function_name, function_response
+                        tool_id, function_name, function_response
                     )
                     successful_tool_call_happened = True # Mark that at least one tool ran
 
                 except json.JSONDecodeError as e:
-                    err_msg = f"Failed to decode tool arguments for {function_name}: {e}. Arguments received: {tool_call.function.arguments}"
+                    err_msg = f"Failed to decode tool arguments for {function_name}: {e}. Arguments received: {function_args_str}"
                     tool_report_print("Argument Error:", err_msg, is_error=True)
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    tool_errors.append((tool_id, function_name, err_msg)) # Store error
                     needs_correction_reprompt = True
                     continue
                 except Exception as e: # Catch execution errors
                     err_msg = f"Error executing tool {function_name}: {e}"
                     print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
                     # traceback.print_exc() # Optional: for more detailed debugging
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    tool_errors.append((tool_id, function_name, err_msg)) # Store error
                     needs_correction_reprompt = True
                     continue
 
@@ -314,10 +358,10 @@ class Assistant:
                 else:
                     print(f"{Fore.RED}Max validation retries exceeded. Failed to get valid tool call(s).{Style.RESET_ALL}")
                     # Fallback: Return the last text response content if available, or a generic error.
-                    # Check if the original message had content besides the failed tool calls
-                    final_text_content = response_message.content or f"Could not complete the tool operation(s) ({', '.join([name for _, name, _ in tool_errors])}) after multiple retries due to validation or execution errors."
+                    # Access content via dict key
+                    final_text_content = response_message.get("content") or f"Could not complete the tool operation(s) ({', '.join([name for _, name, _ in tool_errors])}) after multiple retries due to validation or execution errors."
                     # Ensure the error message is part of the final assistant output
-                    if not response_message.content:
+                    if not response_message.get("content"):
                          # Need to add a final assistant message if the original only had tools
                          self.add_msg_assistant(final_text_content)
 
@@ -325,7 +369,7 @@ class Assistant:
                         self.print_ai(final_text_content)
 
                     # Return the original message object, but the history reflects the errors
-                    return response_message
+                    return response_message # Return the dict
 
             elif successful_tool_call_happened:
                 # If tools executed successfully, get the LLM's summary/next step based on tool results
@@ -338,17 +382,20 @@ class Assistant:
                 # If it is, it implies all tool calls failed validation/parsing and retries were exhausted.
                 # The logic within needs_correction_reprompt handles the retry exhaustion.
                 # If somehow we get here, just print any text content from the original message.
-                 if print_response and response_message.content:
-                    self.print_ai(response_message.content)
-                 return response_message
+                 # Access content via dict key
+                 if print_response and response_message.get("content"):
+                    self.print_ai(response_message["content"])
+                 return response_message # Return the dict
 
         else: # No tool_calls in the initial response message
             # Append the simple text response to history
+            # Append the simple text response dict to history
             if response_message not in self.messages:
-                 self.messages.append(response_message)
-            if print_response and response_message.content:
-                self.print_ai(response_message.content)
-            return response_message
+                 self.messages.append(response_message) # Append the dict
+            # Access content via dict key
+            if print_response and response_message.get("content"):
+                self.print_ai(response_message["content"])
+            return response_message # Return the dict
 
 
 if __name__ == "__main__":
@@ -421,8 +468,10 @@ if __name__ == "__main__":
             print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
         except CommandNotFound as e:
             print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
-        except RateLimitError as e:
-            print(f"{Fore.RED}You are being rate limited\n{e}{Style.RESET_ALL}")
+        # Catch the generic ConnectionError we raise for rate limits, or other request errors
+        except ConnectionError as e:
+            # Error is already printed in get_completion or __process_response
+            pass # Or add specific handling if needed
         except Exception as e:
             print(f"{Fore.RED}An error occurred: {e}{Style.RESET_ALL}")
             # traceback.print_exc()
