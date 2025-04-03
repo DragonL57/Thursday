@@ -1,8 +1,8 @@
-# Thursday - A Personal Assistant In Your Terminal
+# Thursday - A Personal Assistant In Your Terminal (and Web)
 
-Thursday is a Python-based personal assistant that leverages the power of Pollinations AI models to help you with various tasks. It's designed to be versatile and extensible, offering a range of tools to interact with your system and the internet. (These were written by AI)
+Thursday is a Python-based personal assistant that leverages the power of Pollinations AI models to help you with various tasks. It's designed to be versatile and extensible, offering a range of tools to interact with your system and the internet.
 
-A short disclaimer this was originally made to be my personal assistant so it might not be as versatile as you might expect. It uses Pollinations AI as the backend for its language capabilities.
+A short disclaimer: this was originally made to be my personal assistant so it might not be as versatile as you might expect. It uses Pollinations AI as the backend for its language capabilities.
 
 ## Features
 
@@ -15,11 +15,14 @@ A short disclaimer this was originally made to be my personal assistant so it mi
   - Running shell commands
   - And more!
 - **Customizable:** Easily configure the assistant's behavior and extend its capabilities with new tools.
-- **Simple Chat Interface:** Interact with the assistant through a straightforward command-line chat interface.
-- **Memory:** Can save notes between conversation and remember them.
+- **Dual Interface:** 
+  - Terminal Chat Interface: Interact with the assistant through a straightforward command-line chat interface.
+  - Web UI: A browser-based interface with real-time tool execution display.
+- **Memory:** Can save notes between conversations and remember them.
 - **Saving Conversation:** Save and load previous conversations.
 - **Commands:** Supports creating/executing (code), use `/commands` for more information.
 - **Extension:** For now you are required to write some code to extend its capabilities like adding commands to `CommandExecutor` or making new tools, there should be enough examples in `gem/builtin_commands.py` for commands and the `tools` directory for tool implementations.
+- **Real-time Tool Execution:** See tool calls and their results in real-time as they're executed.
 
 ## Getting Started
 
@@ -31,14 +34,14 @@ A short disclaimer this was originally made to be my personal assistant so it mi
 
 ### Installation
 
-1.  Clone the repository:
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/DragonL57/Thursday.git 
 cd Thursday
 ```
 
-2.  Install dependencies using uv:
+2. Install dependencies using uv:
 
 This will create venv if it doesn't exist
 
@@ -46,8 +49,9 @@ This will create venv if it doesn't exist
 uv sync
 ```
 
-
 ### Usage
+
+#### Terminal Interface
 
 Run the `assistant.py` script to start the chat interface:
 
@@ -57,24 +61,15 @@ uv run assistant.py
 
 You can then interact with Thursday by typing commands in the chat. Type `exit`, `quit`, or `bye` to close the chat.
 
-## Configuration
+#### Web Interface
 
-The main configuration file is `config.py`. Here you can customize:
+Run the `app.py` script to start the web server:
 
-- **`MODEL`**: Currently set to "openai-large" for use with Pollinations AI.
-- **`NAME`**: Set the name of your assistant (defaults to "Thursday").
-- **`SYSTEM_PROMPT`**: Modify the system prompt to adjust the assistant's personality and instructions.
-- **API retry parameters**: Control how the application handles temporary failures and rate limits.
+```bash
+uv run app.py
+```
 
-**Note:** Restart the `assistant.py` script after making changes to `config.py`.
-
-## Model Selection
-
-Thursday supports multiple AI model providers through a flexible naming scheme:
-
-- **Default OpenAI-compatible:** `openai-large` (Uses Pollinations.AI's OpenAI-compatible endpoint)
-
-To change the model, modify the `MODEL` variable in `config.py`. Note that tool calling capabilities may vary by model provider and specific model.
+Then open your browser and navigate to `http://localhost:5000` to interact with Thursday via the web interface.
 
 ## Tools
 
@@ -97,6 +92,246 @@ Thursday comes with a set of built-in tools that you can use in your conversatio
 
 **And much more!**
 
+## Configuration
+
+You can configure Thursday's behavior by modifying the following settings in `.env`:
+# Solution for Updating App Name and README
+
+I'll update the UI to use "Thursday" instead of "Gem Assistant" and update the README to reflect the latest changes.
+
+## Step-by-step solution:
+
+1. Update the UI references from "Gem Assistant" to "Thursday" in the templates, JavaScript, and CSS
+2. Update the README.md to include information about the web UI and reflect the latest features
+
+Let's implement these changes:
+
+### [index.html](file:///home/long/personal-gem/templates/index.html)
+
+```html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thursday</title>
+    <!-- ...existing code... -->
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <div class="logo-icon">🗓️</div>
+                <h1>Thursday</h1>
+            </div>
+            <!-- ...existing code... -->
+        </header>
+
+        <!-- ...existing code... -->
+
+        <main class="chat-container">
+            <div class="messages" id="messages">
+                <div class="message-group assistant-message">
+                    <div class="message-avatar">
+                        <span class="avatar-icon">🗓️</span>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-sender">Thursday</span>
+                            <span class="message-time">Just now</span>
+                        </div>
+                        <div class="message-bubble">
+                            <p>Hello! I'm Thursday. How can I help you today?</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Messages will be added here dynamically -->
+            </div>
+            
+            <div class="input-container">
+                <form id="messageForm">
+                    <div class="input-wrapper">
+                        <textarea 
+                            id="userInput" 
+                            placeholder="Message Thursday..." 
+                            rows="1" 
+                            autocomplete="off"
+                        ></textarea>
+                        <!-- ...existing code... -->
+                    </div>
+                </form>
+            </div>
+        </main>
+        
+        <!-- ...existing code... -->
+    </div>
+
+    <!-- ...existing code... -->
+</body>
+</html>
+```
+
+### [messaging.js](file:///home/long/personal-gem/static/js/components/messaging.js)
+
+```javascript
+
+
+Made changes.
+
+import { sendChatMessage, streamChatMessage } from '../utils/api.js';
+import { adjustTextareaHeight, scrollToBottom } from '../utils/dom.js';
+
+export class MessagingComponent {
+    // ...existing code...
+    
+    // Add message to the UI
+    addMessage(content, isUser = false) {
+        const messageGroup = document.createElement('div');
+        messageGroup.className = isUser ? 'message-group user-message' : 'message-group assistant-message';
+        
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        messageGroup.innerHTML = `
+            <div class="message-avatar">
+                <span class="avatar-icon">${isUser ? '👤' : '🗓️'}</span>
+            </div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="message-sender">${isUser ? 'You' : 'Thursday'}</span>
+                    <span class="message-time">${time}</span>
+                </div>
+                <div class="message-bubble"></div>
+            </div>
+        `;
+        
+        // ...existing code...
+    }
+    
+    // ...existing code...
+}
+```
+
+### [README.md](file:///home/long/personal-gem/README.md)
+
+```markdown
+
+
+Made changes.
+
+# Thursday - A Personal Assistant In Your Terminal (and Web)
+
+Thursday is a Python-based personal assistant that leverages the power of Pollinations AI models to help you with various tasks. It's designed to be versatile and extensible, offering a range of tools to interact with your system and the internet.
+
+A short disclaimer: this was originally made to be my personal assistant so it might not be as versatile as you might expect. It uses Pollinations AI as the backend for its language capabilities.
+
+## Features
+
+- **Powered by LLM:** Utilizes Pollinations AI models for natural language understanding and generation.
+- **Tool-based architecture:** Equipped with a variety of tools for tasks like:
+  - Web searching (DuckDuckGo)
+  - File system operations (listing directories, reading/writing files, etc.)
+  - System information retrieval
+  - Reddit interaction
+  - Running shell commands
+  - And more!
+- **Customizable:** Easily configure the assistant's behavior and extend its capabilities with new tools.
+- **Dual Interface:** 
+  - Terminal Chat Interface: Interact with the assistant through a straightforward command-line chat interface.
+  - Web UI: A browser-based interface with real-time tool execution display.
+- **Memory:** Can save notes between conversations and remember them.
+- **Saving Conversation:** Save and load previous conversations.
+- **Commands:** Supports creating/executing (code), use `/commands` for more information.
+- **Extension:** For now you are required to write some code to extend its capabilities like adding commands to `CommandExecutor` or making new tools, there should be enough examples in `gem/builtin_commands.py` for commands and the `tools` directory for tool implementations.
+- **Real-time Tool Execution:** See tool calls and their results in real-time as they're executed.
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11 or higher
+- uv (for dependency management) - [https://docs.astral.sh/uv/getting-started/installation/](https://docs.astral.sh/uv/getting-started/installation/)
+- An internet connection (for Pollinations AI access)
+
+### Installation
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/DragonL57/Thursday.git 
+cd Thursday
+```
+
+2. Install dependencies using uv:
+
+This will create venv if it doesn't exist
+
+```bash
+uv sync
+```
+
+### Usage
+
+#### Terminal Interface
+
+Run the `assistant.py` script to start the chat interface:
+
+```bash
+uv run assistant.py
+```
+
+You can then interact with Thursday by typing commands in the chat. Type `exit`, `quit`, or `bye` to close the chat.
+
+#### Web Interface
+
+Run the `app.py` script to start the web server:
+
+```bash
+uv run app.py
+```
+
+Then open your browser and navigate to `http://localhost:5000` to interact with Thursday via the web interface.
+
+## Tools
+
+Thursday comes with a set of built-in tools that you can use in your conversations. These tools are organized in the `tools` directory by functionality:
+
+- **Web Search:**
+  - `duckduckgo_search_tool` (Enhanced with region, time filters, and safe search parameters)
+
+- **Web Interaction:**
+  - `get_website_text_content` (Enhanced with timeout and extraction modes: 'text', 'markdown', or 'article')
+
+- **File System:**
+  - `list_dir`, `read_file`, `write_files`, `create_directory`, `copy_file`, `move_file`, `rename_file`, `rename_directory`, `get_file_metadata`, `get_directory_size`, `get_multiple_directory_size`
+
+- **System:**
+  - `get_system_info`, `run_shell_command`, `get_current_time`, `get_current_directory`, `get_drives`, `get_environment_variable`
+
+- **Python Tools:**
+  - `inspect_python_script`, `get_python_function_source_code`
+
+**And much more!**
+
+## Configuration
+
+You can configure Thursday's behavior by modifying the following settings in `.env`:
+
+```
+MODEL=openai-large
+TEMPERATURE=0.8
+TOP_P=0.95
+MAX_TOKENS=8192
+CLEAR_BEFORE_START=True
+NAME=Thursday
+```
+
+## Model Selection
+
+Thursday can use different models from Pollinations AI. 
+
+Set your desired model in the `.env` file.
+
 ## LaTeX Support
 
 Thursday supports rendering LaTeX mathematical expressions in conversations. You can use the following formats:
@@ -111,7 +346,19 @@ Note:
 3. Source citations with text inside square brackets followed by URLs will be rendered as text rather than equations.
 4. If you need to include square brackets for non-LaTeX purposes, consider using markdown link syntax or adding some contextual text like "Source:" nearby.
 
+## Web Interface Features
+
+The Thursday web interface offers several advantages:
+
+1. **Real-time Tool Execution:** Watch tools execute in real-time before the final assistant response.
+2. **Syntax Highlighting:** Code blocks are automatically highlighted for better readability.
+3. **LaTeX Support:** Mathematical expressions are rendered properly in the browser.
+4. **Clean Message Display:** User and assistant messages are clearly distinguished.
+5. **Responsive Design:** Works on desktop and mobile devices.
+6. **Theme Toggle:** Switch between light and dark mode.
+
 ## Testing
+
 To run tests, use:
 ```bash
 uv run pytest tests/
@@ -131,6 +378,7 @@ The project dependencies are managed by UV and listed in `pyproject.toml`. Key d
 - `prompt-toolkit`
 - `colorama`
 - `pydantic`
+- `flask` (for web interface)
 
 ## Contributing
 
@@ -150,20 +398,19 @@ This roadmap outlines potential enhancements to evolve Thursday towards a more a
 *   **Self-Correction:** Implement logic to analyze tool failures and attempt automated corrective actions (e.g., retrying commands with different parameters, switching to alternative tools).
 
 ### 3. Improved Learning and Adaptation
-*   **Structured Memory:** Replace the simple `ai-log.txt` with a more structured format (e.g., JSON file, database) to store learned preferences, successful strategies, and environmental facts, enabling more effective context injection and retrieval.
-*   **Feedback Mechanism:** Introduce a user command (e.g., `/feedback`) to allow explicit feedback on task outcomes, storing this information in the structured memory for potential future learning.
+*   **User Preference Tracking:** Learn and remember user preferences, constraints, and common patterns to improve future interactions.
+*   **Local Knowledge Base:** Build and maintain a personal knowledge base for the user, accumulating information from previous interactions and tool calls.
 
 ### 4. Refined Environmental Perception
-*   **Context Integration:** Ensure consistent and explicit use of both static (OS, time, configured location) and dynamic (tool results, conversation history) context in reasoning and planning steps.
-
+*   **Context-Awareness:** Enhance the assistant's ability to understand and adapt to the user's computing environment, current working context, and available resources.
+*   **File Content Understanding:** Improve understanding of file contents and structures to enable more intelligent file operations and code manipulation.
 
 ## Known Issues
 
 - **Web Interaction:** Web interaction tools may not work as expected due to rate limits and other issues.
-- **File download tool:** Might not show progress or filename(if not explicitly provided) correctly if file download endpoint is dynamic
 
-# FAQ
+## FAQ
 
-### Why does it has so many seperate tools?
+### Why does it have so many separate tools?
 
 Because I think it does way better when there is one tool for one thing and it can just choose instead of one tool doing multiple things.

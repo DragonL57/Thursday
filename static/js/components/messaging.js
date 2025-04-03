@@ -32,11 +32,11 @@ export class MessagingComponent {
         
         messageGroup.innerHTML = `
             <div class="message-avatar">
-                <span class="avatar-icon">${isUser ? '👤' : '💎'}</span>
+                <span class="avatar-icon">${isUser ? '👤' : '🗓️'}</span>
             </div>
             <div class="message-content">
                 <div class="message-header">
-                    <span class="message-sender">${isUser ? 'You' : 'Gem Assistant'}</span>
+                    <span class="message-sender">${isUser ? 'You' : 'Thursday'}</span>
                     <span class="message-time">${time}</span>
                 </div>
                 <div class="message-bubble"></div>
