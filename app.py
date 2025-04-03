@@ -7,6 +7,11 @@ import os
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secure secret key for session management
 
+# Create the necessary directories if they don't exist
+os.makedirs(os.path.join(app.static_folder, 'css/components'), exist_ok=True)
+os.makedirs(os.path.join(app.static_folder, 'js/components'), exist_ok=True)
+os.makedirs(os.path.join(app.static_folder, 'js/utils'), exist_ok=True)
+
 # Instantiate the Assistant
 # Make sure config.py and tools are accessible
 try:

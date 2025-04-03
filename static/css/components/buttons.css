@@ -1,0 +1,60 @@
+/* Button component styles */
+.send-button {
+    color: white;
+    background-color: var(--primary-color);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.send-button:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+    transform: scale(1.05);
+}
+
+.icon-button {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.icon-button:hover:not(:disabled) {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.primary-button {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--border-radius);
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.primary-button:hover {
+    background-color: var(--primary-hover);
+}
+
+.secondary-button {
+    background-color: transparent;
+    color: var(--text-secondary);
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--border-radius);
+    font-weight: 500;
+    border: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.secondary-button:hover {
+    background-color: var(--bg-color);
+}

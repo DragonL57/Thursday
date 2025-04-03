@@ -1,0 +1,9 @@
+/* Main CSS file that imports all component styles */
+@import 'theme.css';
+@import 'base.css';
+@import 'layout.css';
+@import 'utilities.css';
+@import 'components/buttons.css';
+@import 'components/inputs.css';
+@import 'components/messages.css';
+@import 'components/modals.css';

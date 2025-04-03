@@ -1,0 +1,49 @@
+/* Theme variables */
+:root {
+    /* Core colors */
+    --primary-color: #6366f1;
+    --primary-hover: #4f46e5;
+    --secondary-color: #8b5cf6;
+    
+    /* Light theme */
+    --bg-color: #f9fafb;
+    --surface-color: #ffffff;
+    --border-color: #e5e7eb;
+    --text-primary: #1f2937;
+    --text-secondary: #4b5563;
+    --text-tertiary: #9ca3af;
+    --sidebar-bg: #f3f4f6;
+    --message-user-bg: #ede9fe;
+    --message-assistant-bg: #ffffff;
+    --message-user-border: #c4b5fd;
+    --message-assistant-border: #e5e7eb;
+    --code-bg: #f9fafb;
+    --highlight-bg: #eef2ff;
+
+    /* Other variables */
+    --border-radius: 12px;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
+    --transition: all 0.2s ease;
+    --header-height: 64px;
+    --sidebar-width: 300px;
+    --input-height: 60px;
+}
+
+/* Dark theme */
+.dark-mode {
+    --bg-color: #111827;
+    --surface-color: #1f2937;
+    --border-color: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #e5e7eb;
+    --text-tertiary: #9ca3af;
+    --sidebar-bg: #1a2234;
+    --message-user-bg: #3730a3;
+    --message-user-border: #4f46e5;
+    --message-assistant-bg: #1f2937;
+    --message-assistant-border: #374151;
+    --code-bg: #111827;
+    --highlight-bg: #312e81;
+}
