@@ -102,9 +102,20 @@ export class MessagingComponent {
             }
         } catch (error) {
             console.error('Error:', error);
-            this.loadingIndicator.classList.add('hidden'); // Ensure it's hidden on error
+            
+            // If the error contains "Maximum retries reached", provide a more helpful message
+            if (error.message && error.message.includes("Maximum retries reached")) {
+                this.addMessage("I'm having trouble connecting to the server after multiple attempts. Please check your connection and try again later.");
+            } else if (error.message && error.message.includes("429")) {
+                this.addMessage("I'm receiving too many requests right now. Please wait a moment before trying again.");
+            } else if (error.message && (error.message.includes("502") || error.message.includes("503") || error.message.includes("504"))) {
+                this.addMessage("The server is currently experiencing issues. Your request will be automatically retried.");
+            } else {
+                this.addMessage(`Sorry, there was an error communicating with the server: ${error.message}`);
+            }
+            
+            this.loadingIndicator.classList.add('hidden');
             this.isProcessing = false;
-            this.addMessage(`Sorry, there was an error communicating with the server: ${error.message}`);
         } finally {
             // Additional fallback to ensure the indicator is always hidden after processing
             this.loadingIndicator.classList.add('hidden');
