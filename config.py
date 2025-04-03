@@ -69,7 +69,7 @@ def get_system_prompt():
     User Context:
     OS: {platform.system()}
     Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-    {get_location_info()} # Consider privacy implications; maybe use Timezone instead.
+    Location: {get_location_info()}
 
     Core Capabilities:
     - Innate powerful language understanding and generation.
