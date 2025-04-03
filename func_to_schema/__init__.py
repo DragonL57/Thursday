@@ -63,7 +63,7 @@ def function_to_json_schema(func: Callable) -> Dict[str, Any]:
         json_schema["function"]["parameters"] = {}
         json_schema["function"]["parameters"]["type"] = "object"
         json_schema["function"]["parameters"]["properties"] = parameters
-        json_schema["function"]["parameters"]["required"] = required_params if required_params else None,
+        json_schema["function"]["parameters"]["required"] = required_params if required_params else None # Removed trailing comma
     
     if docstring.returns and docstring.returns.description:
         json_schema["function"]["returns"] = {

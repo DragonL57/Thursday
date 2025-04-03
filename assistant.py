@@ -2,16 +2,21 @@ import inspect
 import json
 import os
 from typing import Callable
-from typing import Union
+from typing import Union, Dict, List, Any
 import colorama
+import requests
+import threading
+from requests.exceptions import RequestException
 from pydantic import BaseModel
-import litellm
-from tools import TOOLS, validate_tool_call, tool_report_print # Updated imports
+from tools import TOOLS, validate_tool_call, tool_report_print
 import pickle
-from litellm.exceptions import RateLimitError
+import time
+import random
 
 from colorama import Fore, Style
-from rich.console import Console
+from rich.console import Console, Group
+from rich.live import Live
+from rich.padding import Padding
 from rich.markdown import Markdown
 import config as conf
 
@@ -27,7 +32,6 @@ import gem
 from dotenv import load_dotenv
 
 load_dotenv()
-litellm.suppress_debug_info = True
 
 
 class Assistant:
@@ -38,6 +42,7 @@ class Assistant:
         name: str = "Assistant",
         tools: list[Callable] = [],
         system_instruction: str = "",
+        stream_handler: bool = False
     ) -> None:
         self.model = model
         self.name = name
@@ -45,53 +50,233 @@ class Assistant:
         self.messages = []
         self.available_functions = {func.__name__: func for func in tools}
         self.tools = list(map(function_to_json_schema, tools))
+        self.current_tool_calls = []  # Track tool calls for the current request
+        
+        # Streaming support
+        self.stream_handler = stream_handler
+        self.is_processing = False
+        self._processing_thread = None
+        self._final_response = None
+        
+        # Fixed Pollinations API URL for OpenAI-compatible endpoint
+        self.api_base_url = "https://text.pollinations.ai/openai"
+        
+        # Set retry parameters from config or defaults
+        self.retry_count = getattr(conf, 'API_RETRY_COUNT', 3)
+        self.base_delay = getattr(conf, 'API_BASE_DELAY', 1.0)
+        self.max_delay = getattr(conf, 'API_MAX_DELAY', 10.0)
+        self.request_timeout = conf.WEB_REQUEST_TIMEOUT
 
         if system_instruction:
             self.messages.append({"role": "system", "content": system_instruction})
 
         self.console = Console()
-
-    def _get_tool_permission(self, function_name: str, function_args: str) -> bool:
-        """Ask user for permission to use a tool and explain its purpose."""
+        self.border_width = 100
+    
+    def prepare_message(self, message):
+        """
+        Prepare to process a message in streaming mode.
+        This starts a background thread for processing.
+        """
+        # Clear any previous tool calls and results
+        self.current_tool_calls = []
+        self._final_response = None
+        
+        # Add user message
+        self.messages.append({"role": "user", "content": message})
+        
+        # Start processing in a background thread
+        self.is_processing = True
+        self._processing_thread = threading.Thread(target=self._process_message_thread)
+        self._processing_thread.start()
+    
+    def _process_message_thread(self):
+        """Background thread to process the message and execute tools."""
         try:
-            args = json.loads(function_args)
-            print(f"{Fore.CYAN}[TOOL]{Style.RESET_ALL}{Fore.YELLOW}I will use '{Fore.CYAN}{function_name}{Fore.YELLOW}' with arguments:{Style.RESET_ALL}")
-            for key, value in args.items():
-                print(f"{Fore.CYAN}  ├─ {key}: {Fore.WHITE}{value}{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}  ├─ {Fore.WHITE}Allow tool execution? [Y/n]: {Style.RESET_ALL}", end="")
-            response = input().lower()
-            return response == "" or response.startswith("y")
-        except json.JSONDecodeError:
-            print(f"{Fore.CYAN}[TOOL]{Style.RESET_ALL}{Fore.YELLOW}I will use '{Fore.CYAN}{function_name}{Fore.YELLOW}'{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}  ├─ {Fore.WHITE}Allow tool execution? [Y/n]: {Style.RESET_ALL}", end="")
-            response = input().lower()
-            return response == "" or response.startswith("y")
-
+            response = self.get_completion()
+            result = self.__process_response(response)
+            
+            # Store the final response
+            if isinstance(result, str):
+                self._final_response = result
+            elif isinstance(result, dict) and "text" in result:
+                self._final_response = result["text"]
+            else:
+                self._final_response = "Processing completed but no response was generated."
+                
+        except Exception as e:
+            print(f"Error in processing thread: {e}")
+            self._final_response = f"Error during processing: {str(e)}"
+        finally:
+            self.is_processing = False
+    
+    def get_current_tool_calls(self):
+        """Get the current state of tool calls for streaming."""
+        return self.current_tool_calls
+    
+    def get_final_response(self):
+        """Get the final text response after all processing is complete."""
+        return self._final_response
+    
     def send_message(self, message):
+        """
+        Send a message and get the response (non-streaming mode).
+        """
+        # Clear any previous tool calls
+        self.current_tool_calls = []
+        
+        # Add user message and get completion
         self.messages.append({"role": "user", "content": message})
         response = self.get_completion()
-        return self.__process_response(response)
+        
+        # Process the response and return both text and tool calls
+        result = self.__process_response(response)
+        
+        # If result is just a string, return it as is for backward compatibility
+        if isinstance(result, str):
+            return {"text": result, "tool_calls": self.current_tool_calls}
+        
+        # Otherwise return the structured response
+        return result
+
+    def wrap_text(self, text, width):
+        """Custom text wrapper that preserves bullet points and indentation."""
+        lines = []
+        for line in text.split('\n'):
+            is_bullet = line.lstrip().startswith(('•', '-', '*', '1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.'))
+            indent = len(line) - len(line.lstrip())
+            
+            if is_bullet:
+                available_width = width - indent - 2
+            else:
+                available_width = width
+            
+            if len(line) > width:
+                words = line.split()
+                current_line = []
+                current_length = indent
+                
+                for word in words:
+                    if current_length + len(word) + 1 <= available_width:
+                        current_line.append(word)
+                        current_length += len(word) + 1
+                    else:
+                        if current_line:
+                            lines.append(' ' * indent + ' '.join(current_line))
+                        current_line = [word]
+                        current_length = indent + len(word)
+                
+                if current_line:
+                    lines.append(' ' * indent + ' '.join(current_line))
+            else:
+                lines.append(line)
+        
+        return lines
 
     def print_ai(self, msg: str):
-        print(f"{Fore.YELLOW}┌{'─' * 58}┐{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}│ {Fore.GREEN}{self.name}:{Style.RESET_ALL} ", end="")
-        self.console.print(
-            Markdown(msg.strip() if msg else ""), end="", soft_wrap=True, no_wrap=False
-        )
-        print(f"{Fore.YELLOW}└{'─' * 58}┘{Style.RESET_ALL}")
+        formatted_msg = msg.strip() if msg else ""
+        
+        print(f"{Fore.YELLOW}┌{'─' * self.border_width}┐{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}│{Style.RESET_ALL} {Fore.GREEN}{self.name}:{Style.RESET_ALL}")
+        self.console.print(Markdown(formatted_msg))
+        print(f"{Fore.YELLOW}└{'─' * self.border_width}┘{Style.RESET_ALL}")
 
-    def get_completion(self):
-        """Get a completion from the model with the current messages and tools."""
-        return litellm.completion(
-            model=self.model,
-            messages=self.messages,
-            tools=self.tools,
-            temperature=conf.TEMPERATURE,
-            top_p=conf.TOP_P,
-            max_tokens=conf.MAX_TOKENS,
-            seed=conf.SEED,
-            safety_settings=conf.SAFETY_SETTINGS
+    def get_completion(self, retry_count=None, base_delay=None, max_delay=None):
+        """
+        Get a completion from the LLM API with retry logic for transient errors.
+        
+        Args:
+            retry_count: Maximum number of retries (defaults to self.retry_count)
+            base_delay: Base delay between retries in seconds (defaults to self.base_delay)
+            max_delay: Maximum delay between retries in seconds (defaults to self.max_delay)
+        
+        Returns:
+            API response JSON
+        """
+        # Use instance values if parameters not provided
+        retry_count = retry_count if retry_count is not None else self.retry_count
+        base_delay = base_delay if base_delay is not None else self.base_delay
+        max_delay = max_delay if max_delay is not None else self.max_delay
+        
+        last_exception = None
+        
+        for attempt in range(retry_count + 1):
+            try:
+                response = self._make_api_request()
+                return response
+                
+            except requests.exceptions.HTTPError as e:
+                status_code = e.response.status_code if hasattr(e, 'response') else 0
+                
+                if status_code == 429:
+                    if attempt < retry_count:
+                        retry_after = int(e.response.headers.get('Retry-After', 3))
+                        delay = max(retry_after, 3)
+                        print(f"{Fore.YELLOW}Rate limit hit. Retrying in {delay} seconds...{Style.RESET_ALL}")
+                        time.sleep(delay)
+                        continue
+                
+                elif status_code in [502, 503, 504]:
+                    if attempt < retry_count:
+                        delay = min(base_delay * (2 ** attempt) + random.uniform(0, 0.5), max_delay)
+                        print(f"{Fore.YELLOW}Server error ({status_code}). Retrying in {delay:.2f} seconds...{Style.RESET_ALL}")
+                        time.sleep(delay)
+                        continue
+                
+                last_exception = e
+                print(f"{Fore.RED}HTTP error occurred: {e}{Style.RESET_ALL}")
+                
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                if attempt < retry_count:
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1.0), max_delay)
+                    print(f"{Fore.YELLOW}Network error. Retrying in {delay:.2f} seconds...{Style.RESET_ALL}")
+                    time.sleep(delay)
+                    continue
+                
+                last_exception = e
+                print(f"{Fore.RED}Network error: {e}{Style.RESET_ALL}")
+            
+            except Exception as e:
+                last_exception = e
+                print(f"{Fore.RED}Unexpected error: {e}{Style.RESET_ALL}")
+                break
+        
+        if last_exception:
+            raise last_exception
+        raise Exception("Failed to get completion after multiple retries")
+    
+    def _make_api_request(self):
+        """
+        Implementation of API request to Pollinations AI using the openai-large model.
+        """
+        payload = {
+            "model": self.model,
+            "messages": self.messages,
+            "temperature": conf.TEMPERATURE,
+            "top_p": conf.TOP_P,
+            "max_tokens": conf.MAX_TOKENS,
+            "seed": conf.SEED,
+        }
+        
+        # Remove None values from payload
+        payload = {k: v for k, v in payload.items() if v is not None}
+        
+        # Add tools/functions if available
+        if self.tools:
+            payload["tools"] = self.tools
+        
+        headers = {"Content-Type": "application/json"}
+        
+        # Use the timeout from config
+        response = requests.post(
+            self.api_base_url, 
+            json=payload, 
+            headers=headers, 
+            timeout=self.request_timeout
         )
+        response.raise_for_status()
+        
+        return response.json()
 
     def add_msg_assistant(self, msg: str):
         self.messages.append({"role": "assistant", "content": msg})
@@ -105,6 +290,12 @@ class Assistant:
                 "content": str(content),
             }
         )
+        # Update the current tool call status and result
+        for tool_call in self.current_tool_calls:
+            if tool_call.get("id") == tool_id:
+                tool_call["status"] = "completed" if "Error" not in str(content) else "error"
+                tool_call["result"] = str(content)
+                break
 
     @cmd(["save"], "Saves the current chat session to pickle file.")
     def save_session(self, name: str, filepath=f"chats"):
@@ -114,7 +305,6 @@ class Assistant:
             filepath: The path to the directory to save the file to. (default: "/chats")
         """
         try:
-            # create directory if default path doesn't exist
             if filepath == "chats":
                 os.makedirs(filepath, exist_ok=True)
 
@@ -163,7 +353,7 @@ class Assistant:
             try:
                 return annotation(**arg_value)
             except (TypeError, ValueError):
-                return arg_value  # not a valid Pydantic model or data mismatch
+                return arg_value
         elif hasattr(annotation, "__origin__"):
             origin = annotation.__origin__
             args = annotation.__args__
@@ -195,61 +385,63 @@ class Assistant:
                 }
         return arg_value
 
-    def __process_response(self, response, print_response=True, validation_retries=2): # Added retry counter
-        response_message = response.choices[0].message
-        # Avoid appending the message immediately if it might be replaced by a corrected one
-        # self.messages.append(response_message) # Moved appending logic
+    def __process_response(self, response_json, print_response=False, validation_retries=2):
+        if not response_json or "choices" not in response_json or not response_json["choices"]:
+            print(f"{Fore.RED}Error: Invalid response format from API: {response_json}{Style.RESET_ALL}")
+            return {"text": "Error: Received invalid response from API.", "tool_calls": []}
 
-        tool_calls = response_message.tool_calls
+        response_message = response_json["choices"][0]["message"]
 
+        tool_calls_raw = response_message.get("tool_calls")
+
+        tool_calls = []
+        if tool_calls_raw:
+            tool_calls = tool_calls_raw
         if tool_calls:
-            # Only append the assistant message containing tool calls *if* we intend to process them
-            # If all fail validation and retries are exhausted, we might not want this in history.
-            # Let's append it for now, assuming corrections will build upon it.
-            if response_message not in self.messages: # Avoid duplicates during recursion
-                 self.messages.append(response_message)
+            # Track tool calls for this response
+            for tool_call in tool_calls:
+                self.current_tool_calls.append({
+                    "id": tool_call["id"],
+                    "name": tool_call["function"]["name"],
+                    "args": tool_call["function"]["arguments"],
+                    "status": "pending",
+                    "result": None
+                })
+            
+            if response_message not in self.messages:
+                self.messages.append(response_message)
 
             needs_correction_reprompt = False
             successful_tool_call_happened = False
-            tool_errors = [] # Store errors for potential reprompt
+            tool_errors = []
 
             for tool_call in tool_calls:
-                function_name = tool_call.function.name
+                function_name = tool_call['function']['name']
+                tool_id = tool_call['id']
                 function_to_call = self.available_functions.get(function_name)
 
                 if function_to_call is None:
                     err_msg = f"Function not found with name: {function_name}"
                     print(f"{Fore.RED}Error: {err_msg}{Style.RESET_ALL}")
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    tool_errors.append((tool_id, function_name, err_msg))
                     needs_correction_reprompt = True
                     continue
+                try:
+                    function_args_str = tool_call['function']['arguments']
+                    function_args = json.loads(function_args_str)
 
-                # Ask for permission before executing the tool
-                if not self._get_tool_permission(function_name, tool_call.function.arguments):
-                    err_msg = f"Tool execution cancelled by user: {function_name}"
-                    tool_report_print("Cancelled", err_msg, is_error=True)
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg))
-                    needs_correction_reprompt = True
-                    continue
-
-                try: # Wrap parsing, validation, and execution attempt
-                    function_args = json.loads(tool_call.function.arguments)
-
-                    # <<< VALIDATION STEP >>>
                     is_valid, validation_error = validate_tool_call(function_name, function_args)
                     if not is_valid:
                         err_msg = f"Tool call validation failed: {validation_error}. Please correct the parameters."
                         tool_report_print("Validation Error:", f"Tool call '{function_name}'. Reason: {validation_error}", is_error=True)
-                        self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                        tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                        self.add_toolcall_output(tool_id, function_name, err_msg)
+                        tool_errors.append((tool_id, function_name, err_msg))
                         needs_correction_reprompt = True
-                        continue # Skip executing this invalid call
+                        continue
 
-                    # <<< EXECUTION (if valid) >>>
                     sig = inspect.signature(function_to_call)
-                    converted_args = function_args.copy() # Use copy for conversion
+                    converted_args = function_args.copy()
                     for param_name, param in sig.parameters.items():
                         if param_name in converted_args:
                             converted_args[param_name] = self.convert_to_pydantic_model(
@@ -258,79 +450,52 @@ class Assistant:
 
                     function_response = function_to_call(**converted_args)
 
-                    # Print intermediate assistant message if it existed before the tool call
-                    if response_message.content:
-                         # Avoid printing duplicate messages during recursive calls
-                         pass # Let final text print at the end
+                    if response_message.get("content"):
+                        pass
 
-                    # Add successful tool output to history
                     self.add_toolcall_output(
-                        tool_call.id, function_name, function_response
+                        tool_id, function_name, function_response
                     )
-                    successful_tool_call_happened = True # Mark that at least one tool ran
+                    successful_tool_call_happened = True
 
                 except json.JSONDecodeError as e:
-                    err_msg = f"Failed to decode tool arguments for {function_name}: {e}. Arguments received: {tool_call.function.arguments}"
+                    err_msg = f"Failed to decode tool arguments for {function_name}: {e}. Arguments received: {function_args_str}"
                     tool_report_print("Argument Error:", err_msg, is_error=True)
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    tool_errors.append((tool_id, function_name, err_msg))
                     needs_correction_reprompt = True
                     continue
-                except Exception as e: # Catch execution errors
+                except Exception as e:
                     err_msg = f"Error executing tool {function_name}: {e}"
                     print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
-                    # traceback.print_exc() # Optional: for more detailed debugging
-                    self.add_toolcall_output(tool_call.id, function_name, err_msg)
-                    tool_errors.append((tool_call.id, function_name, err_msg)) # Store error
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    tool_errors.append((tool_id, function_name, err_msg))
                     needs_correction_reprompt = True
                     continue
 
-            # === After processing all tool calls in this batch ===
             if needs_correction_reprompt:
                 if validation_retries > 0:
                     print(f"{Fore.YELLOW}Attempting to get corrected tool call(s) from LLM (Retries left: {validation_retries})...{Style.RESET_ALL}")
-                    # History now contains the original attempt + error messages
                     new_response = self.get_completion()
-                    # Recursively process the new response with decremented retries
                     return self.__process_response(new_response, print_response=print_response, validation_retries=validation_retries - 1)
                 else:
                     print(f"{Fore.RED}Max validation retries exceeded. Failed to get valid tool call(s).{Style.RESET_ALL}")
-                    # Fallback: Return the last text response content if available, or a generic error.
-                    # Check if the original message had content besides the failed tool calls
-                    final_text_content = response_message.content or f"Could not complete the tool operation(s) ({', '.join([name for _, name, _ in tool_errors])}) after multiple retries due to validation or execution errors."
-                    # Ensure the error message is part of the final assistant output
-                    if not response_message.content:
-                         # Need to add a final assistant message if the original only had tools
-                         self.add_msg_assistant(final_text_content)
+                    final_text_content = response_message.get("content") or f"Could not complete the tool operation(s) ({', '.join([name for _, name, _ in tool_errors])}) after multiple retries due to validation or execution errors."
+                    if not response_message.get("content"):
+                        self.add_msg_assistant(final_text_content)
 
-                    if print_response:
-                        self.print_ai(final_text_content)
-
-                    # Return the original message object, but the history reflects the errors
-                    return response_message
+                    return {"text": final_text_content, "tool_calls": self.current_tool_calls}
 
             elif successful_tool_call_happened:
-                # If tools executed successfully, get the LLM's summary/next step based on tool results
                 final_response_after_tools = self.get_completion()
-                # Process this final response (might contain text or more tools)
-                # Reset retries for this new turn
-                return self.__process_response(final_response_after_tools, print_response=print_response, validation_retries=2) # Reset retries
+                return self.__process_response(final_response_after_tools, print_response=print_response, validation_retries=2)
             else:
-                # This case should ideally not be reached if tool_calls was not empty initially.
-                # If it is, it implies all tool calls failed validation/parsing and retries were exhausted.
-                # The logic within needs_correction_reprompt handles the retry exhaustion.
-                # If somehow we get here, just print any text content from the original message.
-                 if print_response and response_message.content:
-                    self.print_ai(response_message.content)
-                 return response_message
+                return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
 
-        else: # No tool_calls in the initial response message
-            # Append the simple text response to history
+        else:
             if response_message not in self.messages:
-                 self.messages.append(response_message)
-            if print_response and response_message.content:
-                self.print_ai(response_message.content)
-            return response_message
+                self.messages.append(response_message)
+            return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
 
 
 if __name__ == "__main__":
@@ -342,19 +507,15 @@ if __name__ == "__main__":
         model=conf.MODEL, system_instruction=sys_instruct, tools=TOOLS
     )
 
-    # handle commands
     command = gem.CommandExecuter.register_commands(
         gem.builtin_commands.COMMANDS + [assistant.save_session, assistant.load_session, assistant.reset_session]
     )
     COMMAND_PREFIX = "/"
-    # set command prefix (default is /)
     CommandExecuter.command_prefix = COMMAND_PREFIX
 
     if conf.CLEAR_BEFORE_START:
         gem.clear_screen()
 
-
-    # Customize autocomplete style
     custom_style = PromptToolkitStyle.from_dict({
         "prompt": "fg:ansiblue", 
         "completion-menu": "bg:ansiblack fg:ansigreen",
@@ -378,11 +539,10 @@ if __name__ == "__main__":
     gem.print_header(f"{conf.NAME} CHAT INTERFACE")
     while True:
         try:
-            print(f"{Fore.CYAN}┌{'─' * 58}┐{Style.RESET_ALL}")
-            # msg = input("f{Fore.CYAN}│ {Fore.MAGENTA}You:{Style.RESET_ALL} ")
-            # msg = session.prompt()
+            border_width = 100
+            print(f"{Fore.CYAN}┌{'─' * border_width}┐{Style.RESET_ALL}")
             msg = session.prompt(prompt_text)
-            print(f"{Fore.CYAN}└{'─' * 58}┘{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}└{'─' * border_width}┘{Style.RESET_ALL}")
 
             if not msg:
                 continue
@@ -402,8 +562,7 @@ if __name__ == "__main__":
             print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
         except CommandNotFound as e:
             print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
-        except RateLimitError as e:
-            print(f"{Fore.RED}You are being rate limited\n{e}{Style.RESET_ALL}")
+        except ConnectionError as e:
+            pass
         except Exception as e:
             print(f"{Fore.RED}An error occurred: {e}{Style.RESET_ALL}")
-            # traceback.print_exc()

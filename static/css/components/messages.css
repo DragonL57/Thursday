@@ -1,0 +1,505 @@
+/* Messages component */
+.message-group {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fade-in 0.3s ease forwards;
+}
+
+.message-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.avatar-icon {
+    font-size: 20px;
+}
+
+.user-message .message-avatar {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: transparent;
+}
+
+.message-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    padding: 0 0.5rem;
+}
+
+.message-sender {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.message-time {
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+}
+
+.message-bubble {
+    background-color: var(--message-assistant-bg);
+    border: 1px solid var(--message-assistant-border);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    overflow-wrap: break-word;
+}
+
+.user-message .message-bubble {
+    background-color: var(--message-user-bg);
+    border-color: var(--message-user-border);
+}
+
+/* Tool message styles */
+.tool-message .message-avatar {
+    background-color: #9333ea; /* Purple color for tools */
+    color: white;
+    border-color: transparent;
+}
+
+/* Compact tool message styles */
+.tool-message.compact {
+    margin-bottom: 0.5rem; /* Further reduced margin between messages */
+}
+
+.tool-message.compact .message-bubble {
+    padding: 0.3rem 0.5rem; /* Even smaller padding */
+    background-color: rgba(147, 51, 234, 0.05);
+    border-color: rgba(147, 51, 234, 0.2);
+}
+
+.tool-status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin: 0 0.5rem;
+}
+
+.tool-status-indicator.pending {
+    background-color: var(--text-tertiary);
+}
+
+.tool-status-indicator.completed {
+    background-color: var(--primary-color);
+}
+
+.tool-status-indicator.error {
+    background-color: #ef4444;
+}
+
+.tool-execution {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem; /* Even smaller gap between command and result */
+}
+
+.tool-command {
+    font-family: monospace;
+    font-size: 0.8rem; /* Even smaller font size */
+    color: var(--text-secondary);
+    word-break: break-all;
+    padding: 0; /* Remove any padding */
+    margin: 0; /* Remove any margin */
+}
+
+.tool-command code {
+    background: none;
+    padding: 0;
+}
+
+.tool-result {
+    border-top: 1px dotted var(--border-color);
+    padding-top: 0.1rem; /* Minimal padding */
+    margin-top: 0.1rem; /* Minimal margin */
+    font-size: 0.75rem; /* Smaller font */
+}
+
+.tool-result pre {
+    margin: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.01); /* Even more subtle background */
+    padding: 0.15rem; /* Minimal padding */
+    border-radius: calc(var(--border-radius) - 3px);
+}
+
+.tool-result pre code {
+    font-size: 0.7rem; /* Smallest reasonably readable font */
+    line-height: 1.1; /* Very tight line height */
+    padding: 0;
+    white-space: pre-wrap; /* Allow wrapping for better mobile display */
+}
+
+/* For single-line outputs, make them even more compact */
+.tool-result.single-line pre {
+    padding: 0.1rem 0.15rem;
+}
+
+.tool-result.single-line pre code {
+    line-height: 1;
+}
+
+.tool-result.hidden {
+    display: none;
+}
+
+.tool-message-bubble {
+    background-color: rgba(147, 51, 234, 0.05); /* Light purple background */
+    border-color: rgba(147, 51, 234, 0.2);
+}
+
+.tool-status {
+    display: inline-block;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+}
+
+.tool-status.pending {
+    background-color: var(--text-tertiary);
+    color: white;
+}
+
+.tool-status.completed {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.tool-status.error {
+    background-color: #ef4444;
+    color: white;
+}
+
+.tool-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tool-args h4, 
+.tool-result h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.tool-args pre, 
+.tool-result pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow-x: auto;
+}
+
+/* Typography within message bubbles */
+.message-bubble p {
+    margin-bottom: 0.75rem;
+}
+
+.message-bubble p:last-child {
+    margin-bottom: 0;
+}
+
+.message-bubble h1, 
+.message-bubble h2, 
+.message-bubble h3, 
+.message-bubble h4 {
+    margin: 1.5rem 0 0.5rem;
+    font-weight: 600;
+}
+
+.message-bubble h1 {
+    font-size: 1.5rem;
+}
+
+.message-bubble h2 {
+    font-size: 1.3rem;
+}
+
+.message-bubble h3 {
+    font-size: 1.1rem;
+}
+
+.message-bubble ul, 
+.message-bubble ol {
+    margin: 0.75rem 0;
+    padding-left: 1.5rem;
+}
+
+.message-bubble li {
+    margin-bottom: 0.4rem;
+}
+
+.message-bubble pre {
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    position: relative;
+}
+
+.message-bubble pre code {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.message-bubble code:not(pre code) {
+    background-color: var(--code-bg);
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.message-bubble blockquote {
+    border-left: 4px solid var(--primary-color);
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: var(--text-secondary);
+}
+
+.message-bubble table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+}
+
+.message-bubble th, 
+.message-bubble td {
+    border: 1px solid var(--border-color);
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.message-bubble th {
+    background-color: var(--sidebar-bg);
+    font-weight: 600;
+}
+
+/* Source citation styles to ensure proper formatting */
+.message-bubble .source-citation {
+    display: block;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+    border-left: 3px solid var(--primary-color);
+    padding-left: 0.75rem;
+}
+
+/* Add custom style for URL links to make them stand out */
+.message-bubble a {
+    color: var(--primary-color);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--primary-color);
+    transition: var(--transition);
+}
+
+.message-bubble a:hover {
+    border-bottom-style: solid;
+}
+
+/* Code block copy button */
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+}
+
+.language-indicator {
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.copy-code {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0.7;
+    transition: var(--transition);
+}
+
+.copy-code:hover {
+    opacity: 1;
+}
+
+/* Conversation items */
+.conversation {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    gap: 0.75rem;
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.conversation:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.conversation.active {
+    background-color: var(--highlight-bg);
+    color: var(--primary-color);
+}
+
+.conversation-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    font-size: 0.9rem;
+}
+
+/* LaTeX rendering styles */
+.latex-error {
+    color: var(--primary-color);
+    background-color: rgba(255, 0, 0, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px dashed var(--primary-color);
+    cursor: help;
+}
+
+/* Tool call styles */
+.tool-calls-container {
+    margin-top: 1rem;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 0.75rem;
+}
+
+.tool-call {
+    margin-bottom: 0.75rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.tool-call.pending {
+    border-left: 3px solid var(--text-tertiary);
+}
+
+.tool-call.completed {
+    border-left: 3px solid var(--primary-color);
+}
+
+.tool-call.error {
+    border-left: 3px solid #ef4444;
+}
+
+.tool-call-header {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-bottom: 1px solid var(--border-color);
+    gap: 0.5rem;
+}
+
+.tool-call-icon {
+    font-size: 1rem;
+}
+
+.tool-call-name {
+    font-family: monospace;
+    font-weight: 500;
+    flex-grow: 1;
+}
+
+.tool-call-status {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+
+.tool-call.pending .tool-call-status {
+    background-color: var(--text-tertiary);
+    color: white;
+}
+
+.tool-call.completed .tool-call-status {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.tool-call.error .tool-call-status {
+    background-color: #ef4444;
+    color: white;
+}
+
+.tool-call-body {
+    padding: 0.75rem;
+}
+
+.tool-call-args pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.25rem; /* Further reduced padding */
+    font-size: 0.7rem; /* Even smaller font */
+    color: var(--text-secondary);
+    overflow-x: auto;
+}
+
+.tool-call-result {
+    margin-top: 0.4rem;
+    border-top: 1px dotted var(--border-color);
+    padding-top: 0.3rem; /* Further reduced padding */
+}
+
+.tool-call-result.hidden {
+    display: none;
+}
+
+.tool-call-result-header {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.tool-call-result pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.25rem; /* Further reduced padding */
+    font-size: 0.7rem; /* Even smaller font */
+    color: var(--text-secondary);
+    overflow-x: auto;
+    max-height: 150px; /* Limited height */
+    overflow-y: auto;
+}
+
+.dark-mode .tool-call-args pre,
+.dark-mode .tool-call-result pre {
+    background-color: rgba(0, 0, 0, 0.2);
+}

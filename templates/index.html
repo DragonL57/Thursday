@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thursday</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.0.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script type="module" src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <div class="logo-icon">🗓️</div>
+                <h1>Thursday</h1>
+            </div>
+            <div class="header-actions">
+                <button id="clearChat" class="icon-button" title="Clear conversation">
+                    <span class="material-icons-round">delete_outline</span>
+                </button>
+                <button id="toggleTheme" class="icon-button" title="Toggle dark mode">
+                    <span class="material-icons-round">dark_mode</span>
+                </button>
+                <button id="toggleSidebar" class="icon-button mobile-only" title="Toggle menu">
+                    <span class="material-icons-round">menu</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="app-body">
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h3>Conversations</h3>
+                    <button id="newChat" class="icon-button">
+                        <span class="material-icons-round">add</span>
+                    </button>
+                </div>
+                <div class="conversation-list" id="conversationList">
+                    <!-- Conversations will be populated here -->
+                    <div class="conversation active">
+                        <span class="material-icons-round">chat</span>
+                        <span class="conversation-title">New conversation</span>
+                    </div>
+                </div>
+                <div class="sidebar-footer">
+                    <div class="user-info">
+                        <span class="material-icons-round user-avatar">account_circle</span>
+                        <span class="user-name">User</span>
+                    </div>
+                    <button id="settingsButton" class="icon-button" title="Settings">
+                        <span class="material-icons-round">settings</span>
+                    </button>
+                </div>
+            </aside>
+
+            <main class="chat-container">
+                <div class="messages" id="messages">
+                    <div class="message-group assistant-message">
+                        <div class="message-avatar">
+                            <span class="avatar-icon">🗓️</span>
+                        </div>
+                        <div class="message-content">
+                            <div class="message-header">
+                                <span class="message-sender">Thursday</span>
+                                <span class="message-time">Just now</span>
+                            </div>
+                            <div class="message-bubble">
+                                <p>Hello! I'm Thursday. How can I help you today?</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Messages will be added here dynamically -->
+                </div>
+                
+                <div class="input-container">
+                    <form id="messageForm">
+                        <div class="input-wrapper">
+                            <textarea 
+                                id="userInput" 
+                                placeholder="Message Thursday..." 
+                                rows="1" 
+                                autocomplete="off"
+                            ></textarea>
+                            <div class="input-actions">
+                                <button type="button" id="attachButton" class="icon-button" title="Attach a file">
+                                    <span class="material-icons-round">attach_file</span>
+                                </button>
+                                <button type="submit" id="sendButton" class="send-button" disabled>
+                                    <span class="material-icons-round">send</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="suggestion-chips" id="suggestionChips">
+                            <button type="button" class="chip">Tell me about Python</button>
+                            <button type="button" class="chip">Help me debug my code</button>
+                            <button type="button" class="chip">Explain Docker containers</button>
+                        </div>
+                    </form>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <div class="loading-indicator hidden" id="loadingIndicator">
+        <div class="spinner"></div>
+        <span>Thinking...</span>
+    </div>
+
+    <!-- Modal template -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="close-modal">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-option">
+                    <label for="modelSelect">AI Model</label>
+                    <select id="modelSelect">
+                        <option value="openai-large">OpenAI Large</option>
+                        <option value="gemini-pro">Gemini Pro</option>
+                        <option value="claude-instant">Claude Instant</option>
+                    </select>
+                </div>
+                <div class="settings-option">
+                    <label for="temperatureSlider">Temperature</label>
+                    <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.25">
+                    <span id="temperatureValue">0.25</span>
+                </div>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="saveChatHistory"> 
+                        Save chat history
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary-button close-modal">Cancel</button>
+                <button class="primary-button" id="saveSettings">Save</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
