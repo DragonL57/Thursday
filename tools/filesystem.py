@@ -19,7 +19,11 @@ def get_current_directory() -> str:
     Returns:
         str: The absolute path of the current working directory as a string.
     """
+    # Initial tool announcement
     tool_message_print("get_current_directory", [])
+    
+    # Show execution output
+    tool_message_print("get_current_directory", [], is_output=True)
     try:
         return os.getcwd()
     except Exception as e:
@@ -47,8 +51,13 @@ def list_dir(path: str, recursive: bool, files_only: bool, dirs_only: bool) -> l
             
             Note that it can have different behavior based on given arguments, for example if you only need files, set `files_only=True` and ignore `dirs_only` and `recursive` arguments, they won't have any effect.
     """
+    # Initial tool announcement
     tool_message_print("list_dir", [("path", path), ("recursive", str(recursive)), 
                                    ("files_only", str(files_only)), ("dirs_only", str(dirs_only))])
+    
+    # Show execution output
+    tool_message_print("list_dir", [("path", path), ("recursive", str(recursive)), 
+                                   ("files_only", str(files_only)), ("dirs_only", str(dirs_only))], is_output=True)
     items = []
 
     def add_item(item_path):
@@ -94,7 +103,11 @@ def get_drives() -> list[dict]:
                      - 'FreeSpace': The amount of free space in human-readable format (GB or MB), or 'N/A'.
                      - 'TotalSize': The total size of the drive in human-readable format (GB or MB), or 'N/A'.
     """
+    # Initial tool announcement
     tool_message_print("get_drives")
+    
+    # Show execution output
+    tool_message_print("get_drives", is_output=True)
     drives = []
     import platform
     import psutil
@@ -155,7 +168,11 @@ def get_directory_size(path: str) -> dict:
         - 'TotalSize': The total size of the directory in human-readable format (GB or MB).
         - 'FileCount': The number of files in the directory.
     """
+    # Initial tool announcement
     tool_message_print("get_directory_size", [("path", path)])
+    
+    # Show execution output
+    tool_message_print("get_directory_size", [("path", path)], is_output=True)
     total_size = 0
     file_count = 0
 
@@ -181,7 +198,11 @@ def get_multiple_directory_size(paths: list[str]) -> list[dict]:
         list[dict]: A list of dictionaries containing the total size and the number of files in each directory.
         each item is the same as `get_directory_size`
     """
+    # Initial tool announcement
     tool_message_print("get_multiple_directory_size", [("paths", str(paths))])
+    
+    # Show execution output
+    tool_message_print("get_multiple_directory_size", [("paths", str(paths))], is_output=True)
     return [get_directory_size(path) for path in paths]
 
 def read_file(filepath: str) -> str:
@@ -194,7 +215,11 @@ def read_file(filepath: str) -> str:
     Returns:
         str: The content of the file as a string.
     """
+    # Initial tool announcement
     tool_message_print("read_file", [("filepath", filepath)])
+    
+    # Show execution output
+    tool_message_print("read_file", [("filepath", filepath)], is_output=True)
     try:
         with open(filepath, 'r', encoding="utf-8") as f:
             return f.read()
@@ -212,7 +237,11 @@ def create_directory(paths: list[str]) -> bool:
     Returns:
         bool: True if directories were created successfully, False otherwise.
     """
+    # Initial tool announcement
     tool_message_print("create_directory", [("paths", str(paths))])
+    
+    # Show execution output
+    tool_message_print("create_directory", [("paths", str(paths))], is_output=True)
     try:
         success = True
         for path in paths:
@@ -237,7 +266,11 @@ def get_file_metadata(filepath: str) -> dict:
               - 'creation_time_readable': The creation time in ISO format.
               - 'modification_time_readable': The modification time in ISO format.
     """
+    # Initial tool announcement
     tool_message_print("get_file_metadata", [("filepath", filepath)])
+    
+    # Show execution output
+    tool_message_print("get_file_metadata", [("filepath", filepath)], is_output=True)
     try:
         timestamp_creation = os.path.getctime(filepath)
         timestamp_modification = os.path.getmtime(filepath)
@@ -265,7 +298,11 @@ def write_files(files_data: list[FileData]) -> dict:
     Returns:
       dict: A dictionary with file paths as keys and success status as values.
     """
+    # Initial tool announcement
     tool_message_print("write_files", [("count", str(len(files_data)))])
+    
+    # Show execution output
+    tool_message_print("write_files", [("count", str(len(files_data)))], is_output=True)
     results = {}
     
     for file_data in files_data:
@@ -301,7 +338,11 @@ def copy_file(src_filepath: str, dest_filepath: str) -> bool:
     Returns:
       bool: True if copy successful, False otherwise.
     """
+    # Initial tool announcement
     tool_message_print("copy_file", [("src_filepath", src_filepath), ("dest_filepath", dest_filepath)])
+    
+    # Show execution output
+    tool_message_print("copy_file", [("src_filepath", src_filepath), ("dest_filepath", dest_filepath)], is_output=True)
     try:
         shutil.copy2(src_filepath, dest_filepath) 
         tool_report_print("Status:", "File copied successfully")
@@ -321,7 +362,11 @@ def move_file(src_filepath: str, dest_filepath: str) -> bool:
     Returns:
       bool: True if move successful, False otherwise.
     """
+    # Initial tool announcement
     tool_message_print("move_file", [("src_filepath", src_filepath), ("dest_filepath", dest_filepath)])
+    
+    # Show execution output
+    tool_message_print("move_file", [("src_filepath", src_filepath), ("dest_filepath", dest_filepath)], is_output=True)
     try:
         shutil.move(src_filepath, dest_filepath)
         tool_report_print("Status:", "File moved successfully")
@@ -341,7 +386,11 @@ def rename_file(filepath: str, new_filename: str) -> bool:
     Returns:
       bool: True if rename successful, False otherwise.
     """
+    # Initial tool announcement
     tool_message_print("rename_file", [("filepath", filepath), ("new_filename", new_filename)])
+    
+    # Show execution output
+    tool_message_print("rename_file", [("filepath", filepath), ("new_filename", new_filename)], is_output=True)
     directory = os.path.dirname(filepath)
     new_filepath = os.path.join(directory, new_filename)
     try:
@@ -363,7 +412,11 @@ def rename_directory(path: str, new_dirname: str) -> bool:
     Returns:
       bool: True if rename successful, False otherwise.
     """
+    # Initial tool announcement
     tool_message_print("rename_directory", [("path", path), ("new_dirname", new_dirname)])
+    
+    # Show execution output
+    tool_message_print("rename_directory", [("path", path), ("new_dirname", new_dirname)], is_output=True)
     parent_dir = os.path.dirname(path)
     new_path = os.path.join(parent_dir, new_dirname)
     try:
@@ -388,8 +441,13 @@ def find_files(pattern: str, directory: str = ".", recursive: bool = False, incl
         A list of file paths that match the pattern.  Returns an empty list if no matches are found.
         Returns an appropriate error message if the directory does not exist or is not accessible.
     """
+    # Initial tool announcement
     tool_message_print("find_files", [("pattern", pattern), ("directory", directory), 
                                       ("recursive", str(recursive)), ("include_hidden", str(include_hidden))])
+    
+    # Show execution output
+    tool_message_print("find_files", [("pattern", pattern), ("directory", directory), 
+                                      ("recursive", str(recursive)), ("include_hidden", str(include_hidden))], is_output=True)
     try:
         if not os.path.isdir(directory):
             tool_report_print("Error:", f"Directory '{directory}' not found.", is_error=True)
@@ -425,7 +483,11 @@ def read_file_at_specific_line_range(file_path: str, start_line: int, end_line: 
         The content of the lines, or an error message if start_line is invalid
         or if start_line > end_line.
     """
+    # Initial tool announcement
     tool_message_print("read_file_at_specific_line_range", [("file_path", file_path), ("start_line", start_line), ("end_line", end_line)])
+    
+    # Show execution output
+    tool_message_print("read_file_at_specific_line_range", [("file_path", file_path), ("start_line", start_line), ("end_line", end_line)], is_output=True)
     try:
         with open(file_path, "r", encoding="utf-8") as file:
             lines = file.readlines()

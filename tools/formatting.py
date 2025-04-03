@@ -8,18 +8,21 @@ from colorama import Fore, Style
 # Initialize colorama
 colorama.init(autoreset=True)
 
-def tool_message_print(msg: str, args: list[tuple[str, str]] = None):
+def tool_message_print(msg: str, args: list[tuple[str, str]] = None, is_output: bool = False):
     """
     Prints a tool message with the given message and arguments.
 
     Args:
         msg: The message to print.
         args: A list of tuples containing the argument name and value. Optional.
+        is_output: Whether this is an output message (True) or an input message (False).
     """
-    full_msasage = f"{Fore.CYAN}[TOOL]{Style.RESET_ALL} {Fore.WHITE}{msg}"
+    prefix = "[OUTPUT]" if is_output else "[TOOL]"
     if args:
-        for arg in args:
-            full_msasage += f" [{Fore.YELLOW}{arg[0]}{Fore.WHITE}={arg[1]}]"
+        args_str = " ".join(f"[{Fore.YELLOW}{arg[0]}{Fore.WHITE}={arg[1]}]" for arg in args)
+        full_msasage = f"{Fore.CYAN}{prefix}{Style.RESET_ALL} {Fore.WHITE}{msg} {args_str}"
+    else:
+        full_msasage = f"{Fore.CYAN}{prefix}{Style.RESET_ALL} {Fore.WHITE}{msg}"
     print(full_msasage)
 
 def tool_report_print(msg: str, value: str, is_error: bool = False):

@@ -427,7 +427,6 @@ class Assistant:
                     tool_errors.append((tool_id, function_name, err_msg))
                     needs_correction_reprompt = True
                     continue
-
                 try:
                     function_args_str = tool_call['function']['arguments']
                     function_args = json.loads(function_args_str)
