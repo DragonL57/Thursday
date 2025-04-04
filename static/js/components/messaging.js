@@ -1,4 +1,4 @@
-import { sendChatMessage, streamChatMessage } from '../utils/api.js';
+import { sendChatMessage, streamChatMessage, abortCurrentRequest } from '../utils/api.js';
 import { adjustTextareaHeight, scrollToBottom } from '../utils/dom.js';
 
 export class MessagingComponent {
@@ -9,6 +9,7 @@ export class MessagingComponent {
         this.messageForm = elements.messageForm;
         this.loadingIndicator = elements.loadingIndicator;
         this.isProcessing = false;
+        this.currentAssistantMessage = null; // Track the current assistant message being generated
         
         // Track image attachments
         this.currentImageData = null;
@@ -18,9 +19,16 @@ export class MessagingComponent {
     }
     
     initEvents() {
-        // Existing form submission handler
+        // Form submission handler
         this.messageForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            // If we're already processing, this means we want to stop generation
+            if (this.isProcessing) {
+                this.stopGeneration();
+                return;
+            }
+            
             const message = this.userInput.value.trim();
             if ((message || this.currentImageData) && !this.isProcessing) {
                 await this.sendMessage(message);
@@ -40,6 +48,64 @@ export class MessagingComponent {
                 }
             });
         }
+    }
+    
+    // New method to stop ongoing generation
+    stopGeneration() {
+        // Abort the current API request
+        abortCurrentRequest();
+        
+        // Reset UI state
+        this.setGeneratingState(false);
+        
+        // Add a note that generation was stopped
+        if (this.currentAssistantMessage) {
+            const messageBubble = this.currentAssistantMessage.querySelector('.message-bubble');
+            if (messageBubble) {
+                const stoppedNote = document.createElement('div');
+                stoppedNote.className = 'generation-stopped-note';
+                stoppedNote.textContent = '(Generation stopped)';
+                stoppedNote.style.color = 'var(--text-tertiary)';
+                stoppedNote.style.fontStyle = 'italic';
+                stoppedNote.style.fontSize = '0.85rem';
+                stoppedNote.style.marginTop = '0.5rem';
+                messageBubble.appendChild(stoppedNote);
+            }
+        }
+        
+        // Clear reference to current assistant message
+        this.currentAssistantMessage = null;
+    }
+    
+    // Set UI state for generating/not generating
+    setGeneratingState(isGenerating) {
+        this.isProcessing = isGenerating;
+        
+        // Update input field state
+        this.userInput.disabled = isGenerating;
+        const inputWrapper = this.userInput.closest('.input-wrapper');
+        if (isGenerating) {
+            inputWrapper.classList.add('generating');
+        } else {
+            inputWrapper.classList.remove('generating');
+        }
+        
+        // Update button appearance
+        if (isGenerating) {
+            this.sendButton.classList.remove('send-button');
+            this.sendButton.classList.add('stop-button');
+            this.sendButton.querySelector('.material-icons-round').textContent = 'close';
+            this.sendButton.title = 'Stop generation';
+        } else {
+            this.sendButton.classList.remove('stop-button');
+            this.sendButton.classList.add('send-button');
+            this.sendButton.querySelector('.material-icons-round').textContent = 'send';
+            this.sendButton.title = 'Send message';
+            this.sendButton.disabled = !this.userInput.value.trim() && !this.currentImageData;
+        }
+        
+        // Hide the standalone loading indicator
+        this.loadingIndicator.classList.add('hidden');
     }
     
     // Handle paste events to capture images
@@ -126,21 +192,19 @@ export class MessagingComponent {
     
     // Add message to the UI
     addMessage(content, isUser = false, hasImage = false) {
+        // Hide welcome message if it exists
+        const welcomeMessage = document.getElementById('welcomeMessage');
+        if (welcomeMessage) {
+            welcomeMessage.classList.add('hidden');
+        }
+        
         const messageGroup = document.createElement('div');
         messageGroup.className = isUser ? 'message-group user-message' : 'message-group assistant-message';
         
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
         let messageHTML = `
-            <div class="message-avatar">
-                <span class="avatar-icon">${isUser ? '👤' : '🗓️'}</span>
-            </div>
             <div class="message-content">
-                <div class="message-header">
-                    <span class="message-sender">${isUser ? 'You' : 'Thursday'}</span>
-                    <span class="message-time">${time}</span>
-                </div>
-                <div class="message-bubble">
+                <div class="message-content-container">
+                    <div class="message-bubble">
         `;
         
         // Add image if exists
@@ -152,8 +216,22 @@ export class MessagingComponent {
             `;
         }
         
+        // For assistant messages, add thinking indicator if we're starting a new response
+        if (!isUser && !content) {
+            messageHTML += `
+                <div class="message-thinking">
+                    <span>Thursday is thinking</span>
+                    <div class="typing-dots">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
         // Close message bubble div
-        messageHTML += `</div></div>`;
+        messageHTML += `</div></div></div>`;
         
         messageGroup.innerHTML = messageHTML;
         
@@ -174,8 +252,8 @@ export class MessagingComponent {
                     messageBubble.appendChild(textParagraph);
                 }
             }
-        } else {
-            // For assistant messages, render markdown
+        } else if (content) {
+            // For assistant messages, render markdown if we have content
             messageBubble.innerHTML += marked.parse(content);
             
             // Render LaTeX within the newly added message
@@ -190,15 +268,50 @@ export class MessagingComponent {
         this.messagesContainer.appendChild(messageGroup);
         scrollToBottom(this.messagesContainer);
         
+        // If this is an assistant message, store reference to update later with streaming content
+        if (!isUser) {
+            this.currentAssistantMessage = messageGroup;
+        }
+        
         return messageGroup;
     }
     
+    // Update the current assistant message with new content
+    updateAssistantMessage(content) {
+        if (!this.currentAssistantMessage) return;
+        
+        const messageBubble = this.currentAssistantMessage.querySelector('.message-bubble');
+        if (!messageBubble) return;
+        
+        // Remove thinking indicator if it exists
+        const thinkingIndicator = messageBubble.querySelector('.message-thinking');
+        if (thinkingIndicator) {
+            thinkingIndicator.remove();
+        }
+        
+        // Update with new content
+        messageBubble.innerHTML = marked.parse(content);
+        
+        // Apply formatting
+        renderMathInElement(messageBubble, {
+            delimiters: [
+                {left: "$$", right: "$$", display: true},
+                {left: "$", right: "$", display: false}
+            ]
+        });
+        
+        // Highlight any code blocks
+        messageBubble.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+        
+        scrollToBottom(this.messagesContainer);
+    }
+
     // Add a tool call as a separate message (compact version)
     addToolCallMessage(toolCall) {
         const messageGroup = document.createElement('div');
         messageGroup.className = 'message-group tool-message compact';
-        
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
         // Parse the arguments
         let args;
@@ -219,22 +332,17 @@ export class MessagingComponent {
         }
         
         messageGroup.innerHTML = `
-            <div class="message-avatar">
-                <span class="avatar-icon">🔧</span>
-            </div>
             <div class="message-content">
-                <div class="message-header">
-                    <span class="message-sender">${toolCall.name}</span>
-                    <span class="tool-status-indicator ${toolCall.status}" title="${toolCall.status}"></span>
-                    <span class="message-time">${time}</span>
-                </div>
-                <div class="message-bubble tool-message-bubble" data-tool-id="tool-call-${toolCall.id}">
-                    <div class="tool-execution">
-                        <div class="tool-command">
-                            <code>${toolCall.name}(${args})</code>
-                        </div>
-                        <div class="tool-result ${resultClass}">
-                            <pre><code>${toolCall.result || ''}</code></pre>
+                <div class="message-content-container">
+                    <div class="tool-status-indicator ${toolCall.status}" title="${toolCall.status}"></div>
+                    <div class="message-bubble tool-message-bubble" data-tool-id="tool-call-${toolCall.id}">
+                        <div class="tool-execution">
+                            <div class="tool-command">
+                                <code>${toolCall.name}(${args})</code>
+                            </div>
+                            <div class="tool-result ${resultClass}">
+                                <pre><code>${toolCall.result || ''}</code></pre>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -358,16 +466,58 @@ export class MessagingComponent {
         this.userInput.value = '';
         this.clearImageAttachment();
         
-        // Trigger input event to adjust textarea height and disable send button
+        // Trigger input event to adjust textarea height
         this.userInput.dispatchEvent(new Event('input'));
         
-        // Show loading indicator
-        this.isProcessing = true;
-        this.loadingIndicator.classList.remove('hidden');
+        // Create empty assistant message with thinking indicator
+        this.addMessage('', false);
+        
+        // Set UI to generating state
+        this.setGeneratingState(true);
+        
+        let currentContent = '';
         
         try {
             // Use streaming API with callbacks for real-time updates
             await streamChatMessage(message, imageData, {
+                // Called when a new token is received
+                onToken: (token) => {
+                    // Ensure proper spacing between tokens
+                    if (currentContent && token) {
+                        // Check if we need to add space between chunks
+                        const lastChar = currentContent.charAt(currentContent.length - 1);
+                        const firstChar = token.charAt(0);
+                        
+                        // Add space in the following cases:
+                        // 1. Between two alphanumeric characters
+                        // 2. After punctuation like comma, semicolon, etc. when followed by alphanumeric
+                        // 3. Before an opening parenthesis or bracket when preceded by alphanumeric
+                        const needsSpace = (
+                            // Case 1: Between alphanumeric characters
+                            (/[a-zA-Z0-9]/.test(lastChar) && 
+                             /[a-zA-Z0-9]/.test(firstChar)) ||
+                            
+                            // Case 2: After punctuation when followed by alphanumeric
+                            (/[,.;:!?]/.test(lastChar) && 
+                             /[a-zA-Z0-9]/.test(firstChar)) ||
+                            
+                            // Case 3: Before opening brackets/parentheses
+                            (/[a-zA-Z0-9]/.test(lastChar) && 
+                             /[\(\[\{]/.test(firstChar))
+                        );
+                        
+                        // Add space if needed and if there isn't already a space
+                        if (needsSpace && 
+                            !currentContent.endsWith(' ') && 
+                            !token.startsWith(' ')) {
+                            currentContent += ' ';
+                        }
+                    }
+                    
+                    currentContent += token;
+                    this.updateAssistantMessage(currentContent);
+                },
+                
                 // Called when a new tool call is detected
                 onToolCall: (toolCall) => {
                     this.addToolCallMessage(toolCall);
@@ -381,7 +531,10 @@ export class MessagingComponent {
                 // Called when the final response is ready
                 onFinalResponse: (response) => {
                     if (response) {
-                        this.addMessage(response, false);
+                        // If we already have built up content from streaming, we don't need this
+                        if (!currentContent) {
+                            this.updateAssistantMessage(response);
+                        }
                     }
                 },
                 
@@ -391,30 +544,35 @@ export class MessagingComponent {
                     
                     // Show a more helpful message for rate limit errors
                     if (error.toLowerCase().includes('rate limit')) {
-                        this.addMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.", false);
+                        this.updateAssistantMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.");
                     } else {
-                        this.addMessage(`Error: ${error}`, false);
+                        this.updateAssistantMessage(`Error: ${error}`);
                     }
+                    
+                    // Reset UI state
+                    this.setGeneratingState(false);
                 },
                 
                 // Called when the stream is complete
                 onDone: () => {
-                    // Hide loading indicator
-                    this.loadingIndicator.classList.add('hidden');
-                    this.isProcessing = false;
+                    // Reset UI state
+                    this.setGeneratingState(false);
+                    this.currentAssistantMessage = null;
                 }
             });
         } catch (error) {
             console.error('Error:', error);
-            this.loadingIndicator.classList.add('hidden');
-            this.isProcessing = false;
             
             // Show a more helpful message for rate limit errors
             if (error.toString().toLowerCase().includes('rate limit')) {
-                this.addMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.", false);
+                this.updateAssistantMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.");
             } else {
-                this.addMessage('Sorry, there was an error processing your request. Please try again.');
+                this.updateAssistantMessage('Sorry, there was an error processing your request. Please try again.');
             }
+            
+            // Reset UI state
+            this.setGeneratingState(false);
+            this.currentAssistantMessage = null;
         }
     }
     

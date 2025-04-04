@@ -2,9 +2,9 @@
 .send-button {
     color: white;
     background-color: var(--primary-color);
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -13,13 +13,17 @@
 
 .send-button:hover:not(:disabled) {
     background-color: var(--primary-hover);
-    transform: scale(1.05);
+}
+
+.send-button:disabled {
+    background-color: var(--border-color);
+    opacity: 0.5;
 }
 
 .icon-button {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -57,4 +61,14 @@
 
 .secondary-button:hover {
     background-color: var(--bg-color);
+}
+
+/* Sidebar button styles */
+.sidebar .icon-button {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.sidebar .icon-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
 }

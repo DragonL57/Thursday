@@ -1,49 +1,49 @@
 /* Theme variables */
 :root {
     /* Core colors */
-    --primary-color: #6366f1;
-    --primary-hover: #4f46e5;
-    --secondary-color: #8b5cf6;
+    --primary-color: #10a37f; /* ChatGPT green */
+    --primary-hover: #0e8e6f;
+    --secondary-color: #6e6e80;
     
     /* Light theme */
-    --bg-color: #f9fafb;
+    --bg-color: #f7f7f8; /* Light gray background */
     --surface-color: #ffffff;
-    --border-color: #e5e7eb;
-    --text-primary: #1f2937;
-    --text-secondary: #4b5563;
-    --text-tertiary: #9ca3af;
-    --sidebar-bg: #f3f4f6;
-    --message-user-bg: #ede9fe;
+    --border-color: #e5e5e5;
+    --text-primary: #343541;
+    --text-secondary: #6e6e80;
+    --text-tertiary: #8e8ea0;
+    --sidebar-bg: #202123;
+    --message-user-bg: #f7f7f8; /* Match with bg-color for subtlety */
     --message-assistant-bg: #ffffff;
-    --message-user-border: #c4b5fd;
-    --message-assistant-border: #e5e7eb;
-    --code-bg: #f9fafb;
-    --highlight-bg: #eef2ff;
+    --message-user-border: #e5e5e5;
+    --message-assistant-border: #e5e5e5;
+    --code-bg: #f7f7f8;
+    --highlight-bg: #f1f5f9;
 
     /* Other variables */
-    --border-radius: 12px;
+    --border-radius: 8px;
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
     --transition: all 0.2s ease;
-    --header-height: 64px;
-    --sidebar-width: 300px;
+    --header-height: 48px; /* Reduced height */
+    --sidebar-width: 260px;
     --input-height: 60px;
 }
 
 /* Dark theme */
 .dark-mode {
-    --bg-color: #111827;
-    --surface-color: #1f2937;
-    --border-color: #374151;
-    --text-primary: #f9fafb;
-    --text-secondary: #e5e7eb;
+    --bg-color: #343541; /* ChatGPT dark background */
+    --surface-color: #444654;
+    --border-color: #565869;
+    --text-primary: #ececf1;
+    --text-secondary: #c5c5d2;
     --text-tertiary: #9ca3af;
-    --sidebar-bg: #1a2234;
-    --message-user-bg: #3730a3;
-    --message-user-border: #4f46e5;
-    --message-assistant-bg: #1f2937;
-    --message-assistant-border: #374151;
-    --code-bg: #111827;
-    --highlight-bg: #312e81;
+    --sidebar-bg: #202123;
+    --message-user-bg: #343541; /* Keep consistent with dark mode bg */
+    --message-user-border: #565869;
+    --message-assistant-bg: #444654;
+    --message-assistant-border: #565869;
+    --code-bg: #2d2d39;
+    --highlight-bg: #2e3c51;
 }

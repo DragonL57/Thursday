@@ -7,6 +7,7 @@ import json
 import time
 import base64
 import re
+import random  # Add the missing import
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secure secret key for session management
@@ -153,6 +154,13 @@ def chat_stream():
                     yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n"
                 else:
                     # Send the final response
+                    # Split the response into chunks/tokens for streaming
+                    chunks = chunk_text(final_response)
+                    for chunk in chunks:
+                        yield f"data: {json.dumps({'event': 'token', 'data': chunk})}\n\n"
+                        time.sleep(0.01)  # Small delay to simulate typing
+                    
+                    # Also send the final complete response
                     yield f"data: {json.dumps({'event': 'final', 'data': final_response})}\n\n"
                 
             except Exception as e:
@@ -187,6 +195,49 @@ def chat_stream():
                 f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n",
                 mimetype='text/event-stream'
             )
+
+def chunk_text(text, avg_chunk_size=3):
+    """Split text into smaller chunks for streaming."""
+    if not text:
+        return []
+        
+    # Split by spaces but preserve them
+    parts = []
+    current = ""
+    
+    for char in text:
+        current += char
+        if char == ' ':
+            parts.append(current)
+            current = ""
+    
+    if current:  # Add the last part if it exists
+        parts.append(current)
+    
+    # Now group these parts into chunks
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for part in parts:
+        current_chunk.append(part)
+        current_length += 1
+        
+        # Use some randomization to make it feel more natural
+        if current_length >= avg_chunk_size and random.random() > 0.5:
+            # Check if we should split here
+            last_part = current_chunk[-1].strip()
+            if (last_part.endswith(('.', '!', '?', ':', ';', ',')) or 
+                current_length >= avg_chunk_size * 2):
+                chunks.append(''.join(current_chunk))
+                current_chunk = []
+                current_length = 0
+    
+    # Add any remaining content
+    if current_chunk:
+        chunks.append(''.join(current_chunk))
+    
+    return chunks
 
 @app.route('/chat', methods=['POST'])
 def chat():
