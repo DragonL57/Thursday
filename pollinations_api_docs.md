@@ -26,6 +26,7 @@
 - [Rate Limits and Quotas](#rate-limits-and-quotas)
 - [Troubleshooting Common Issues](#troubleshooting-common-issues)
 - [Appendix: Code Examples](#appendix-code-examples)
+- [Working with Streaming Responses](#working-with-streaming-responses)
 
 ## Introduction
 
@@ -567,4 +568,343 @@ def process_response(response, print_response=True):
         return {"content": "Error processing response"}
 ```
 
-This comprehensive guide should help you effectively integrate with the Pollinations.AI API, especially when implementing function calling functionality.
+## Working with Streaming Responses
+
+Streaming allows your application to receive and process AI-generated content in real-time, rather than waiting for the complete response. This creates more responsive interfaces and can significantly improve user experience, especially for longer responses.
+
+### Benefits of Streaming
+
+- **Improved Perceived Responsiveness:** Users see content appear incrementally rather than waiting for the full response
+- **Earlier Feedback:** Your application can begin processing/displaying initial parts of responses immediately
+- **Better for Long Responses:** Particularly valuable for detailed explanations or code generation
+- **Reduced Timeout Issues:** Less likely to hit request timeouts with long-running generations
+
+### Streaming Text Responses
+
+#### GET Endpoint with Streaming
+
+To enable streaming with the simple GET endpoint:
+
+```
+GET https://text.pollinations.ai/{your_prompt}?stream=true
+```
+
+The response will be delivered as Server-Sent Events (SSE) with each event containing a chunk of the generated text.
+
+#### POST Endpoint with Streaming
+
+For more complex interactions including conversations and function calls, use the OpenAI-compatible endpoint with the `stream` parameter set to `true`:
+
+```
+POST https://text.pollinations.ai/openai
+```
+
+Request Body:
+```json
+{
+  "model": "openai",
+  "messages": [
+    {"role": "user", "content": "Write a detailed explanation of photosynthesis"}
+  ],
+  "stream": true
+}
+```
+
+### Working with SSE (Server-Sent Events)
+
+Server-Sent Events follow a specific format:
+
+```
+data: {"choices":[{"delta":{"content":"This is "},"index":0}]}
+
+data: {"choices":[{"delta":{"content":"the first "},"index":0}]}
+
+data: {"choices":[{"delta":{"content":"chunk."},"index":0}]}
+
+data: [DONE]
+```
+
+Each chunk contains delta content that should be accumulated to build the complete response. The stream ends with a special `data: [DONE]` event.
+
+### Handling Tool/Function Calling with Streaming
+
+When using streaming with function calling, there are important considerations:
+
+1. Initial chunks will contain the regular assistant response content
+2. When the model decides to call a function, you'll receive delta chunks containing tool call information
+3. You must accumulate these chunks to reconstruct the complete tool call request
+4. Execute the function call and provide the results back to the API just as with non-streaming requests
+5. Continue streaming to get the assistant's final response after tool execution
+
+### Implementation Examples
+
+#### JavaScript (Browser)
+
+```javascript
+async function streamText(prompt) {
+  const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?stream=true`);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    buffer += decoder.decode(value, { stream: true });
+    
+    // Process complete SSE events
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || ""; // Keep partial event in buffer
+    
+    for (const event of events) {
+      if (!event.startsWith("data: ")) continue;
+      
+      const data = event.substring(6); // Remove "data: " prefix
+      if (data === "[DONE]") {
+        console.log("Stream complete");
+        continue;
+      }
+      
+      try {
+        const chunk = JSON.parse(data);
+        const content = chunk.choices?.[0]?.delta?.content || "";
+        if (content) {
+          // Do something with the content chunk
+          console.log("Received chunk:", content);
+          document.getElementById("output").textContent += content;
+        }
+      } catch (e) {
+        console.error("Error parsing chunk:", e);
+      }
+    }
+  }
+}
+```
+
+#### JavaScript (OpenAI-Compatible POST Endpoint)
+
+```javascript
+async function streamCompletion(messages) {
+  const response = await fetch("https://text.pollinations.ai/openai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "openai",
+      messages: messages,
+      stream: true
+    })
+  });
+  
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullContent = "";
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    buffer += decoder.decode(value, { stream: true });
+    
+    // Process complete SSE events
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+    
+    for (const event of events) {
+      if (!event.startsWith("data: ")) continue;
+      
+      const data = event.substring(6);
+      if (data === "[DONE]") continue;
+      
+      try {
+        const chunk = JSON.parse(data);
+        const content = chunk.choices?.[0]?.delta?.content || "";
+        
+        // Check if this is a tool call
+        const toolCallFunction = chunk.choices?.[0]?.delta?.tool_calls?.[0]?.function;
+        const toolCallId = chunk.choices?.[0]?.delta?.tool_calls?.[0]?.id;
+        
+        if (toolCallFunction) {
+          // Handle tool call chunk
+          console.log("Tool call chunk:", toolCallFunction);
+          // You'll need to accumulate these to reconstruct the complete tool call
+        } else if (content) {
+          // Regular content chunk
+          fullContent += content;
+          console.log("Content chunk:", content);
+        }
+      } catch (e) {
+        console.error("Error parsing chunk:", e);
+      }
+    }
+  }
+  
+  return fullContent;
+}
+```
+
+#### Python (requests and sseclient-py)
+
+```python
+import requests
+import json
+import sseclient  # pip install sseclient-py
+
+def stream_text(prompt):
+    url = f"https://text.pollinations.ai/{requests.utils.quote(prompt)}"
+    params = {"stream": "true"}
+    
+    with requests.get(url, params=params, stream=True) as response:
+        response.raise_for_status()
+        client = sseclient.SSEClient(response)
+        
+        full_text = ""
+        for event in client.events():
+            if event.data == "[DONE]":
+                break
+            
+            try:
+                chunk = json.loads(event.data)
+                content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                if content:
+                    full_text += content
+                    print(content, end="", flush=True)
+            except json.JSONDecodeError:
+                print(f"Error parsing: {event.data}")
+        
+        return full_text
+
+# Using OpenAI-compatible POST endpoint with streaming
+def stream_completion(messages):
+    url = "https://text.pollinations.ai/openai"
+    payload = {
+        "model": "openai",
+        "messages": messages,
+        "stream": True
+    }
+    headers = {"Content-Type": "application/json"}
+    
+    with requests.post(url, json=payload, headers=headers, stream=True) as response:
+        response.raise_for_status()
+        client = sseclient.SSEClient(response)
+        
+        full_text = ""
+        tool_calls = []
+        current_tool_call = None
+        
+        for event in client.events():
+            if event.data == "[DONE]":
+                break
+            
+            try:
+                chunk = json.loads(event.data)
+                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                
+                # Handle content
+                content = delta.get("content", "")
+                if content:
+                    full_text += content
+                    print(content, end="", flush=True)
+                
+                # Handle tool calls (need to be accumulated)
+                tool_call_delta = delta.get("tool_calls", [])
+                if tool_call_delta:
+                    # Handle tool call chunks
+                    # This is simplified - you'd need more complex logic to 
+                    # properly accumulate fragmented tool call information
+                    print("\nTool call detected in stream")
+            
+            except json.JSONDecodeError:
+                print(f"Error parsing: {event.data}")
+        
+        return full_text, tool_calls
+```
+
+#### Node.js (with fetch)
+
+```javascript
+import fetch from 'node-fetch';
+
+async function streamText(prompt) {
+  const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(prompt)}?stream=true`);
+  
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  
+  // Using a helper to handle SSE parsing
+  for await (const chunk of parseSSE(response.body)) {
+    if (chunk === "[DONE]") break;
+    
+    try {
+      const parsed = JSON.parse(chunk);
+      const content = parsed.choices?.[0]?.delta?.content || "";
+      
+      if (content) {
+        process.stdout.write(content); // Print without newline
+      }
+    } catch (e) {
+      console.error("Error parsing chunk:", e);
+    }
+  }
+}
+
+// Helper function to parse SSE
+async function* parseSSE(stream) {
+  const decoder = new TextDecoder();
+  const reader = stream.getReader();
+  let buffer = "";
+  
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      buffer += decoder.decode(value, { stream: true });
+      
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || "";
+      
+      for (const line of lines) {
+        const match = line.match(/^data: (.*)/);
+        if (match) {
+          yield match[1];
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+// Example usage
+streamText("Explain quantum computing in simple terms").catch(console.error);
+```
+
+### Best Practices for Streaming
+
+1. **Handle Connection Issues:** Implement retry logic with exponential backoff for dropped connections
+2. **Manage Accumulated Content:** Store the complete content as it builds up for later reference
+3. **UI Considerations:**
+   - Use typing-like animations or show a cursor at the end of incomplete sentences
+   - Pre-allocate space for the response to minimize layout shifts
+   - Apply syntax highlighting and formatting progressively
+4. **Error Handling:** Have clear error states for stream interruptions
+5. **Rate Limiting:** Be aware that streaming requests count against the same rate limits as regular requests
+
+### Debugging Streaming Issues
+
+Common streaming issues and solutions:
+
+1. **Chunks Not Coming Through:** Ensure proper handling of SSE format and confirm that stream parameter is properly set
+2. **Partial Tool Calls:** Tool calls may be split across multiple chunks and need to be accumulated
+3. **Stream Terminating Early:** Check for network stability and implement reconnection logic
+4. **High Latency First Token:** The initial chunk may take longer; show a loading state until first content arrives
+5. **Content Rendering Flicker:** Buffer small chunks (especially for code blocks) before rendering updates
+
+### Security Considerations for Streaming
+
+1. **Timeout Management:** Set appropriate client-side timeouts to prevent indefinite hanging connections
+2. **Content Filtering:** Apply the same content safety measures to stream chunks as you would to complete responses
+3. **Resource Usage:** Monitor and limit the number of concurrent streaming connections to prevent resource exhaustion
