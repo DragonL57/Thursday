@@ -236,33 +236,19 @@ export class MessagingComponent {
         const messageGroup = document.createElement('div');
         messageGroup.className = isUser ? 'message-group user-message' : 'message-group assistant-message';
         
-        let messageHTML = `
-            <div class="message-content">
-                <div class="message-content-container">
-                    <div class="message-bubble">
-        `;
+        // Fixed template literal - removed extra newlines
+        let messageHTML = `<div class="message-content"><div class="message-content-container"><div class="message-bubble">`;
         
         // Add image if exists
         if (isUser && hasImage && this.currentImageData) {
-            messageHTML += `
-                <div class="message-image">
-                    <img src="${this.currentImageData}" alt="Attached image" loading="lazy">
-                </div>
-            `;
+            // Fixed template literal - removed extra newlines
+            messageHTML += `<div class="message-image"><img src="${this.currentImageData}" alt="Attached image" loading="lazy"></div>`;
         }
         
         // For assistant messages, add thinking indicator if we're starting a new response
         if (!isUser && !content) {
-            messageHTML += `
-                <div class="message-thinking">
-                    <span>Thursday is thinking</span>
-                    <div class="typing-dots">
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                        <div class="dot"></div>
-                    </div>
-                </div>
-            `;
+            // Fixed template literal - removed extra newlines
+            messageHTML += `<div class="message-thinking"><span>Thursday is thinking</span><div class="typing-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
         }
         
         // Close message bubble div
