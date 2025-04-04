@@ -1,4 +1,4 @@
-import { updateSettings } from '../utils/api.js';
+import { updateSettings, getSettings } from '../utils/api.js';
 
 export class SettingsManager {
     constructor(elements, messagingComponent) {
@@ -8,11 +8,13 @@ export class SettingsManager {
         this.saveSettingsButton = elements.saveSettingsButton;
         this.temperatureSlider = elements.temperatureSlider;
         this.temperatureValue = elements.temperatureValue;
+        this.maxTokensInput = elements.maxTokensInput;
         this.modelSelect = elements.modelSelect;
         this.saveChatHistory = elements.saveChatHistory;
         this.messagingComponent = messagingComponent;
         
         this.init();
+        this.fetchCurrentSettings();
     }
     
     init() {
@@ -37,10 +39,45 @@ export class SettingsManager {
         this.saveSettingsButton.addEventListener('click', () => this.saveSettings());
     }
     
+    async fetchCurrentSettings() {
+        try {
+            const settings = await getSettings();
+            
+            // Update UI with current settings
+            if (settings.model) {
+                this.modelSelect.value = settings.model;
+            }
+            
+            if (settings.temperature !== undefined) {
+                // Ensure the temperature is properly formatted
+                const tempValue = parseFloat(settings.temperature);
+                this.temperatureSlider.value = tempValue;
+                this.temperatureValue.textContent = tempValue;
+                
+                // Log to confirm we're getting the right value
+                console.log('Server temperature setting:', tempValue);
+            }
+            
+            if (settings.max_tokens !== undefined) {
+                this.maxTokensInput.value = settings.max_tokens;
+                console.log('Server max_tokens setting:', settings.max_tokens);
+            }
+            
+            if (settings.save_history !== undefined) {
+                this.saveChatHistory.checked = settings.save_history;
+            }
+            
+            console.log('Loaded server settings:', settings);
+        } catch (error) {
+            console.error('Error fetching settings:', error);
+        }
+    }
+    
     async saveSettings() {
         const settings = {
             model: this.modelSelect.value,
             temperature: parseFloat(this.temperatureSlider.value),
+            max_tokens: parseInt(this.maxTokensInput.value),
             save_history: this.saveChatHistory.checked
         };
         

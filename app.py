@@ -312,22 +312,34 @@ def update_settings():
         settings = request.json
         session_id = session.get('user_id', request.remote_addr)
         
-        if settings.get('model'):
-            # Update model if provided and different from current
-            new_model = settings['model']
-            if session_id in assistants:
-                assistants[session_id].model = new_model
+        # Update the config.py values
+        updated_settings = conf.update_config(settings)
         
-        if 'temperature' in settings:
-            # Update temperature in config (would need proper implementation)
-            temp = float(settings['temperature'])
-            conf.TEMPERATURE = temp
+        # Update active assistant instances
+        if session_id in assistants:
+            if settings.get('model'):
+                assistants[session_id].model = settings['model']
+            
+            # Some models might allow temperature updates
+            if 'temperature' in settings and hasattr(assistants[session_id], 'set_temperature'):
+                try:
+                    assistants[session_id].set_temperature(float(settings['temperature']))
+                except (AttributeError, ValueError):
+                    pass
         
-        # Other settings could be handled here
-        
-        return jsonify({"status": "Settings updated successfully"})
+        return jsonify({"status": "Settings updated successfully", "settings": updated_settings})
     except Exception as e:
         return jsonify({"error": f"Failed to update settings: {str(e)}"}), 500
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Return the current settings from config."""
+    return jsonify({
+        'model': conf.MODEL,
+        'temperature': conf.TEMPERATURE,
+        'max_tokens': conf.MAX_TOKENS,
+        'save_history': conf.SAVE_HISTORY if hasattr(conf, 'SAVE_HISTORY') else True
+    })
 
 if __name__ == '__main__':
     # Generate a proper secret key for production

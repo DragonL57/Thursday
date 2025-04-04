@@ -288,8 +288,9 @@ export class MessagingComponent {
                 }
             }
         } else if (content) {
-            // For assistant messages, render markdown if we have content
-            messageBubble.innerHTML += marked.parse(content);
+            // For both user and assistant messages, render markdown
+            const preservedContent = this.preserveLineBreaks(content);
+            messageBubble.innerHTML += marked.parse(preservedContent);
             
             // Render LaTeX within the newly added message
             renderMathInElement(messageBubble, {
@@ -311,6 +312,19 @@ export class MessagingComponent {
         return messageGroup;
     }
     
+    // Helper method to preserve line breaks in content
+    preserveLineBreaks(content) {
+        // Replace single-character line breaks with special markup
+        // This will preserve sequences of single characters on their own lines
+        if (!content) return '';
+        
+        // First, identify patterns where single characters are on their own lines
+        return content.replace(/^(\w)$|(\n\w)$/gm, (match) => {
+            const char = match.trim();
+            return `${char}<!-- linebreak -->`;
+        });
+    }
+
     // Update the current assistant message with new content
     updateAssistantMessage(content) {
         if (!this.currentAssistantMessage) return;

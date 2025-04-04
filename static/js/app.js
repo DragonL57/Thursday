@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveSettingsButton: document.getElementById('saveSettings'),
         temperatureSlider: document.getElementById('temperatureSlider'),
         temperatureValue: document.getElementById('temperatureValue'),
+        maxTokensInput: document.getElementById('maxTokensInput'),
         modelSelect: document.getElementById('modelSelect'),
         saveChatHistory: document.getElementById('saveChatHistory'),
         sidebar: document.querySelector('.sidebar'),

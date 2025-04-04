@@ -21,9 +21,14 @@ export function setupMarkdown() {
                     </div>
                 `;
             },
-            // Improve paragraph handling to preserve LaTeX delimiters
+            // Improve paragraph handling to preserve line breaks
             paragraph(text) {
-                // Make sure we don't interfere with LaTeX delimiters
+                // Check if the text contains our special linebreak markers
+                if (text.includes('<!-- linebreak -->')) {
+                    // Replace our markers with proper <br> tags
+                    const processedText = text.replace(/<!-- linebreak -->/g, '<br>');
+                    return `<p>${processedText}</p>`;
+                }
                 return `<p>${text}</p>`;
             },
             // Override link renderer to ensure proper rendering

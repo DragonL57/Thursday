@@ -136,6 +136,7 @@
     margin-bottom: 1rem;
     line-height: 1.6;
     font-size: 1rem;
+    white-space: pre-wrap; /* This preserves whitespace and line breaks */
 }
 
 .message-bubble p:last-child {
@@ -185,6 +186,7 @@
     position: relative;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     border: 1px solid var(--border-color);
+    white-space: pre-wrap; /* Allow code to wrap */
 }
 
 .message-bubble pre code {
@@ -388,6 +390,7 @@
     color: var(--text-primary);
     max-width: 100%; /* Limit width for message bubbles */
     text-align: left;
+    white-space: pre-wrap; /* Preserve whitespace in user messages too */
 }
 
 .assistant-message .message-bubble {
@@ -399,6 +402,7 @@
     margin-bottom: 1rem;
     line-height: 1.6;
     font-size: 1rem;
+    white-space: pre-wrap; /* This preserves whitespace and line breaks */
 }
 
 .message-bubble p:last-child {
@@ -448,6 +452,7 @@
     position: relative;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     border: 1px solid var(--border-color);
+    white-space: pre-wrap; /* Allow code to wrap */
 }
 
 .message-bubble pre code {
@@ -473,285 +478,24 @@
     border-radius: 0 var(--border-radius) var(--border-radius) 0;
 }
 
-.message-bubble table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1.2rem 0;
-    border-radius: var(--border-radius);
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    border: 1px solid var(--border-color);
+.user-message .message-bubble blockquote,
+.assistant-message .message-bubble blockquote {
+    border-left: 4px solid var(--primary-color);
+    padding: 0.6rem 1rem;
+    margin: 1.5rem 0;
+    color: var(--text-secondary);
+    background-color: rgba(16, 163, 127, 0.05);
+    border-radius: 0 var(--border-radius) var(--border-radius) 0;
 }
 
-.message-bubble th, 
-.message-bubble td {
-    border: 1px solid var(--border-color);
-    padding: 0.75rem 1rem;
-    text-align: left;
-}
-
-.message-bubble th {
-    background-color: rgba(0,0,0,0.02);
-    font-weight: 600;
-}
-
-.dark-mode .message-bubble th {
-    background-color: rgba(255,255,255,0.05);
-}
-
-/* Source citation styles to ensure proper formatting */
-.message-bubble .source-citation {
+/* Additional spacing for single character lines */
+.message-bubble br + br {
     display: block;
-    font-size: 0.9em;
-    color: var(--text-secondary);
-    margin-top: 0.75rem;
-    border-left: 3px solid var(--primary-color);
-    padding: 0.5rem 0.75rem;
-    background-color: rgba(16, 163, 127, 0.05);
-    border-radius: 0 var(--border-radius) var (--border-radius) 0;
+    content: "";
+    margin-top: 0.5em;
 }
 
-/* Add custom style for URL links to make them stand out */
-.message-bubble a {
-    color: var(--primary-color);
-    text-decoration: none;
-    border-bottom: 1px solid transparent;
-    transition: var(--transition);
-    font-weight: 500;
-}
-
-.message-bubble a:hover {
-    border-bottom: 1px solid var(--primary-color);
-}
-
-/* Code block copy button */
-.code-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 1rem;
-    background-color: rgba(0,0,0,0.03);
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.8rem;
-    color: var (--text-tertiary);
-    border-radius: var(--border-radius) var(--border-radius) 0 0;
-    margin-top: -1rem;
-    margin-left: -1rem;
-    margin-right: -1rem;
-    margin-bottom: 1rem;
-}
-
-.dark-mode .code-header {
-    background-color: rgba(255,255,255,0.05);
-}
-
-.language-indicator {
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-size: 0.75rem;
-}
-
-.copy-code {
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    opacity: 0.7;
-    transition: var(--transition);
-    background-color: rgba(0,0,0,0.1);
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-}
-
-.copy-code:hover {
-    opacity: 1;
-    background-color: rgba(0,0,0,0.15);
-}
-
-.dark-mode .copy-code {
-    background-color: rgba(255,255,255,0.1);
-}
-
-.dark-mode .copy-code:hover {
-    background-color: rgba(255,255,255,0.15);
-}
-
-/* Conversation items */
-.conversation {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem;
-    border-radius: var(--border-radius);
-    gap: 0.75rem;
-    cursor: pointer;
-    transition: var(--transition);
-    color: var(--text-secondary);
-    margin-bottom: 0.25rem;
-}
-
-.conversation:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-}
-
-.conversation.active {
-    background-color: var(--highlight-bg);
-    color: var(--primary-color);
-}
-
-.conversation-title {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex: 1;
-    font-size: 0.9rem;
-}
-
-/* LaTeX rendering styles */
-.latex-error {
-    color: var(--primary-color);
-    background-color: rgba(255, 0, 0, 0.1);
-    padding: 2px 4px;
-    border-radius: 3px;
-    border: 1px dashed var(--primary-color);
-    cursor: help;
-}
-
-/* Tool call styles */
-.tool-calls-container {
-    margin-top: 1rem;
-    border-top: 1px dashed var(--border-color);
-    padding-top: 0.75rem;
-}
-
-.tool-call {
-    margin-bottom: 0.75rem;
-    border-radius: var(--border-radius);
-    border: none;
-    background-color: rgba(16, 163, 127, 0.05);
-    overflow: hidden;
-}
-
-.tool-call.pending {
-    border-left: 3px solid var(--text-tertiary);
-}
-
-.tool-call.completed {
-    border-left: 3px solid var(--primary-color);
-}
-
-.tool-call.error {
-    border-left: 3px solid #ef4444;
-}
-
-.tool-call-header {
-    display: flex;
-    align-items: center;
-    padding: 0.5rem 0.75rem;
-    background-color: rgba(0, 0, 0, 0.02);
-    border-bottom: 1px solid var(--border-color);
-    gap: 0.5rem;
-}
-
-.tool-call-icon {
-    font-size: 1rem;
-}
-
-.tool-call-name {
-    font-family: monospace;
-    font-weight: 500;
-    flex-grow: 1;
-}
-
-.tool-call-status {
-    text-transform: uppercase;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 0.2rem 0.4rem;
-    border-radius: 4px;
-}
-
-.tool-call.pending .tool-call-status {
-    background-color: var(--text-tertiary);
-    color: white;
-}
-
-.tool-call.completed .tool-call-status {
-    background-color: var(--primary-color);
-    color: white;
-}
-
-.tool-call.error .tool-call-status {
-    background-color: #ef4444;
-    color: white;
-}
-
-.tool-call-body {
-    padding: 0.75rem;
-}
-
-.tool-call-args pre {
-    margin: 0;
-    background-color: var(--code-bg);
-    border-radius: var(--border-radius);
-    padding: 0.25rem; /* Further reduced padding */
-    font-size: 0.7rem; /* Even smaller font */
-    color: var(--text-secondary);
-    overflow-x: auto;
-}
-
-.tool-call-result {
-    margin-top: 0.4rem;
-    border-top: 1px dotted var(--border-color);
-    padding-top: 0.3rem; /* Further reduced padding */
-}
-
-.tool-call-result.hidden {
-    display: none;
-}
-
-.tool-call-result-header {
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    color: var(--text-secondary);
-}
-
-.tool-call-result pre {
-    margin: 0;
-    background-color: var(--code-bg);
-    border-radius: var(--border-radius);
-    padding: 0.25rem; /* Further reduced padding */
-    font-size: 0.7rem; /* Even smaller font */
-    color: var(--text-secondary);
-    overflow-x: auto;
-    max-height: 150px; /* Limited height */
-    overflow-y: auto;
-}
-
-.dark-mode .tool-call-args pre,
-.dark-mode .tool-call-result pre {
-    background-color: rgba(0, 0, 0, 0.2);
-}
-
-/* Image input and preview styles */
-.image-preview-container {
-}
-
-/* Add styles for the image size notice */
-.image-notice {
-    font-size: 0.6rem;
-    color: var(--text-tertiary);
-    padding: 0;
-    margin: 0;
-    display: inline-block;
-    max-width: 50px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    vertical-align: middle;
-}
-
-/* Image styles */
+/* Image styles - enhanced */
 .message-image {
     margin: 0.1rem 0;
     max-height: 40px;
