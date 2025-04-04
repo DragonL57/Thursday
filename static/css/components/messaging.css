@@ -504,14 +504,18 @@
     background-color: rgba(0, 0, 0, 0.2);
 }
 
-/* Image input and preview styles */
+/* CLEAN IMPLEMENTATION: Image input and preview styles */
 .image-preview-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.15rem;
-    padding: 0.15rem 0;
-    max-height: 40px; /* Dramatically reduced from 70px */
-    overflow-y: auto;
+    position: relative;
+    display: inline-block;
+    margin-right: 4px;
+    vertical-align: middle;
+    width: 160px !important; /* Doubled from 80px to 160px */
+    height: 160px !important; /* Doubled from 80px to 160px */
+    min-width: 160px !important;
+    min-height: 160px !important;
+    max-width: 160px !important;
+    max-height: 160px !important;
 }
 
 .image-preview-container.hidden {
@@ -520,72 +524,84 @@
 
 .image-preview {
     position: relative;
-    width: 15px; /* Dramatically reduced from 30px (half size) */
-    height: 15px; /* Dramatically reduced from 30px (half size) */
-    border-radius: var(--border-radius);
-    overflow: hidden;
+    display: inline-block;
+    width: 160px !important; /* Doubled from 80px to 160px */
+    height: 160px !important; /* Doubled from 80px to 160px */
+    min-width: 160px !important;
+    min-height: 160px !important;
+    max-width: 160px !important;
+    max-height: 160px !important;
     border: 1px solid var(--border-color);
+    border-radius: 3px;
+    overflow: visible !important;
 }
 
 .image-preview img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
 .remove-image {
-    position: absolute;
-    top: 0px; /* Position above the image */
-    right: 0px; /* Extend outside the image */
-    width: 30px; /* Slightly larger than before */
-    height: 30px; /* Slightly larger than before */
-    background-color: rgba(255, 0, 0, 0.7); /* More visible red background */
-    color: white;
-    border-radius: 50%;
-    border: 1px solid white; /* Add white border for visibility */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 9px; /* Slightly larger font */
-    padding: 0;
-    line-height: 1;
-    z-index: 3; /* Ensure it's above the image */
+    position: absolute !important;
+    top: -6px !important;
+    right: -6px !important;
+    width: 14px !important; /* Made larger for better usability */
+    height: 14px !important;
+    background-color: #ff0000 !important;
+    color: white !important;
+    font-size: 10px !important;
+    line-height: 14px !important;
+    text-align: center !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: 1px solid white !important; /* Added white border for visibility */
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    z-index: 9999 !important;
+    box-shadow: 0 0 2px rgba(0,0,0,0.5) !important;
 }
 
-.remove-image:hover {
-    background-color: rgba(255, 0, 0, 0.9);
-}
-
-/* Message image display */
+/* CLEAN IMPLEMENTATION: Message image display */
 .message-image {
-    margin: 0.15rem 0;
-    max-height: 80px; /* Dramatically reduced from 150px */
-    overflow: hidden;
-    border-radius: var(--border-radius);
+    display: inline-block !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    overflow: hidden !important;
+    border-radius: 2px !important;
+    border: 1px solid var(--border-color) !important;
+    position: relative !important;
+    vertical-align: middle !important;
+    margin: 0.1rem !important;
+    padding: 0 !important;
 }
 
 .message-image img {
-    max-width: 100%;
-    max-height: 80px; /* Dramatically reduced from 150px */
-    object-fit: contain;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
 }
 
-.user-message .message-image {
-    max-width: 50px; /* Dramatically reduced from 100px */
+/* Image size notice */
+.image-notice {
+    font-size: 0.6rem !important;
+    color: var(--text-tertiary) !important;
+    margin-left: 4px !important;
+    vertical-align: middle !important;
+    max-width: 30px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 
-/* Image attachment notification in input */
-.image-notification {
-    display: flex;
-    align-items: center;
-    color: var(--primary-color);
-    font-size: 0.6rem; /* Further reduced from 0.7rem */
-    padding: 0.1rem 0.2rem; /* Further reduced padding */
-    margin-top: 0.1rem; /* Further reduced margin */
-}
-
-.image-notification .material-icons-round {
-    font-size: 1rem;
-    margin-right: 0.25rem;
-}
+/* DELETE ALL OTHER CONFLICTING IMAGE STYLES BELOW THIS LINE */

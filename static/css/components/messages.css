@@ -212,19 +212,52 @@
 
 /* Image styles - enhanced */
 .message-image {
-    margin: 0.75rem 0;
-    max-height: 400px;
-    overflow: hidden;
-    border-radius: var(--border-radius);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    display: inline-block !important;
+    width: 32px !important; /* Increased to 32px - twice as large */
+    height: 32px !important; /* Increased to 32px - twice as large */
+    min-width: 32px !important;
+    min-height: 32px !important;
+    max-width: 32px !important;
+    max-height: 32px !important;
+    overflow: hidden !important;
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     border: 1px solid var(--border-color);
+    position: relative;
+    vertical-align: middle;
+    flex-shrink: 0;
+    margin: 0 0.2rem !important;
+    padding: 0 !important;
 }
 
 .message-image img {
-    max-width: 100%;
-    max-height: 400px;
-    object-fit: contain;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
     display: block;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* OVERRIDE AND REMOVE: Image styles section - to avoid conflicts */
+/* Delete/override conflicting image styles by setting explicit !important rules */
+.message-image {
+    width: 40px !important;
+    height: 40px !important;
+    min-width: 40px !important;
+    min-height: 40px !important;
+    max-width: 40px !important;
+    max-height: 40px !important;
+    margin: 0.1rem !important;
+    padding: 0 !important;
+    border-radius: 2px !important;
+    overflow: hidden !important;
+}
+
+.message-image img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
 }
 
 /* Tool message styling - more subtle */
@@ -359,241 +392,6 @@
 
 .assistant-message .message-bubble {
     max-width: 100%; /* Limit width for message bubbles */
-}
-
-/* Typography within message bubbles */
-.message-bubble p {
-    margin-bottom: 1rem;
-    line-height: 1.6;
-    font-size: 1rem;
-}
-
-.message-bubble p:last-child {
-    margin-bottom: 0;
-}
-
-.message-bubble h1, 
-.message-bubble h2, 
-.message-bubble h3, 
-.message-bubble h4 {
-    margin: 1.8rem 0 0.8rem;
-    font-weight: 600;
-    line-height: 1.3;
-}
-
-.message-bubble h1 {
-    font-size: 1.8rem;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 0.5rem;
-}
-
-.message-bubble h2 {
-    font-size: 1.5rem;
-}
-
-.message-bubble h3 {
-    font-size: 1.25rem;
-}
-
-.message-bubble ul, 
-.message-bubble ol {
-    margin: 0.75rem 0;
-    padding-left: 1.5rem;
-}
-
-.message-bubble li {
-    margin-bottom: 0.5rem;
-    line-height: 1.6;
-}
-
-.message-bubble pre {
-    background-color: var(--code-bg);
-    border-radius: var(--border-radius);
-    padding: 1rem;
-    overflow-x: auto;
-    margin: 1rem 0;
-    position: relative;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    border: 1px solid var(--border-color);
-}
-
-.message-bubble pre code {
-    font-family: 'Fira Code', monospace;
-    font-size: 0.9rem;
-    line-height: 1.5;
-}
-
-.message-bubble code:not(pre code) {
-    background-color: var(--code-bg);
-    padding: 0.15rem 0.3rem;
-    border-radius: 4px;
-    font-size: 0.9em;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}
-
-.message-bubble blockquote {
-    border-left: 4px solid var(--primary-color);
-    padding: 0.6rem 1rem;
-    margin: 1.5rem 0;
-    color: var(--text-secondary);
-    background-color: rgba(16, 163, 127, 0.05);
-    border-radius: 0 var(--border-radius) var(--border-radius) 0;
-}
-
-/* Tool message styles */
-.tool-message .message-avatar {
-    background-color: #9333ea; /* Purple color for tools */
-    color: white;
-    border-color: transparent;
-}
-
-/* Compact tool message styles */
-.tool-message.compact {
-    margin-bottom: 0; /* Further reduced margin between messages */
-    border-bottom: 1px solid rgba(0,0,0,0.05);
-    padding: 0.5rem 1rem;
-    background-color: rgba(16, 163, 127, 0.02);
-}
-
-.dark-mode .tool-message.compact {
-    background-color: rgba(16, 163, 127, 0.05);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.tool-message.compact .message-bubble {
-    padding: 0.3rem 0.5rem; /* Even smaller padding */
-    background-color: rgba(147, 51, 234, 0.05);
-    border-color: rgba(147, 51, 234, 0.2);
-}
-
-.tool-status-indicator {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin: 0 0.5rem;
-}
-
-.tool-status-indicator.pending {
-    background-color: var(--text-tertiary);
-}
-
-.tool-status-indicator.completed {
-    background-color: var(--primary-color);
-}
-
-.tool-status-indicator.error {
-    background-color: #ef4444;
-}
-
-.tool-execution {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem; /* Even smaller gap between command and result */
-}
-
-.tool-command {
-    font-family: monospace;
-    font-size: 0.8rem; /* Even smaller font size */
-    color: var(--text-secondary);
-    word-break: break-all;
-    padding: 0; /* Remove any padding */
-    margin: 0; /* Remove any margin */
-}
-
-.tool-command code {
-    background: none;
-    padding: 0;
-}
-
-.tool-result {
-    border-top: 1px dotted var(--border-color);
-    padding-top: 0.1rem; /* Minimal padding */
-    margin-top: 0.1rem; /* Minimal margin */
-    font-size: 0.75rem; /* Smaller font */
-}
-
-.tool-result pre {
-    margin: 0;
-    max-height: 150px;
-    overflow-y: auto;
-    background-color: rgba(0, 0, 0, 0.01); /* Even more subtle background */
-    padding: 0.15rem; /* Minimal padding */
-    border-radius: calc(var(--border-radius) - 3px);
-}
-
-.tool-result pre code {
-    font-size: 0.7rem; /* Smallest reasonably readable font */
-    line-height: 1.1; /* Very tight line height */
-    padding: 0;
-    white-space: pre-wrap; /* Allow wrapping for better mobile display */
-}
-
-/* For single-line outputs, make them even more compact */
-.tool-result.single-line pre {
-    padding: 0.1rem 0.15rem;
-}
-
-.tool-result.single-line pre code {
-    line-height: 1;
-}
-
-.tool-result.hidden {
-    display: none;
-}
-
-.tool-message-bubble {
-    background-color: rgba(147, 51, 234, 0.05); /* Light purple background */
-    border-color: rgba(147, 51, 234, 0.2);
-}
-
-.tool-status {
-    display: inline-block;
-    text-transform: uppercase;
-    font-size: 0.7rem;
-    font-weight: 600;
-    padding: 0.3rem 0.6rem;
-    border-radius: 4px;
-    margin-bottom: 0.5rem;
-}
-
-.tool-status.pending {
-    background-color: var(--text-tertiary);
-    color: white;
-}
-
-.tool-status.completed {
-    background-color: var(--primary-color);
-    color: white;
-}
-
-.tool-status.error {
-    background-color: #ef4444;
-    color: white;
-}
-
-.tool-details {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.tool-args h4, 
-.tool-result h4 {
-    margin: 0 0 0.5rem 0;
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-
-.tool-args pre, 
-.tool-result pre {
-    margin: 0;
-    background-color: var(--code-bg);
-    border-radius: var(--border-radius);
-    padding: 0.75rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    overflow-x: auto;
 }
 
 /* Typography within message bubbles */
@@ -941,29 +739,39 @@
 
 /* Add styles for the image size notice */
 .image-notice {
-    font-size: 0.75rem;
+    font-size: 0.6rem;
     color: var(--text-tertiary);
-    padding: 0.25rem 0.5rem;
-    margin-top: 0.25rem;
-    background-color: rgba(0, 0, 0, 0.05);
-    border-radius: var(--border-radius);
+    padding: 0;
+    margin: 0;
     display: inline-block;
+    max-width: 50px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
 /* Image styles */
 .message-image {
-    margin: 0.75rem 0;
-    max-height: 400px;
+    margin: 0.1rem 0;
+    max-height: 40px;
+    max-width: 40px;
+    min-width: 16px;
+    min-height: 16px;
     overflow: hidden;
-    border-radius: var(--border-radius);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    border-radius: 2px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
     border: 1px solid var(--border-color);
+    position: relative;
+    display: inline-block;
+    flex-shrink: 0;
+    vertical-align: middle;
 }
 
 .message-image img {
-    max-width: 100%;
-    max-height: 400px;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     display: block;
 }
 
