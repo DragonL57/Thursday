@@ -1,6 +1,6 @@
 /* Utility classes */
 .hidden {
-    display: none !important; /* Added !important to ensure it takes precedence */
+    display: none !important;
 }
 
 /* Responsive design */
@@ -11,6 +11,7 @@
         left: 0;
         height: 100%;
         transform: translateX(-100%);
+        z-index: 20;
     }
     
     .sidebar.open {
@@ -28,13 +29,40 @@
     }
 }
 
+@media (max-width: 768px) {
+    .message-group {
+        padding: 0;
+    }
+    
+    .assistant-message, 
+    .user-message {
+        padding: 1rem 0.75rem;
+    }
+    
+    .message-bubble {
+        padding: 0;
+    }
+    
+    .input-container {
+        padding: 0.75rem 0.75rem 1.5rem;
+    }
+    
+    .message-bubble h1 {
+        font-size: 1.5rem;
+    }
+    
+    .message-bubble h2 {
+        font-size: 1.3rem;
+    }
+}
+
 @media (max-width: 576px) {
     .app-header {
-        padding: 0 1rem;
+        padding: 0 0.75rem;
     }
     
     .logo h1 {
-        font-size: 1rem;
+        font-size: 0.9rem;
     }
     
     .message-group {
@@ -47,10 +75,15 @@
     }
     
     .message-bubble {
-        padding: 0.75rem;
+        padding: 0.5rem 0.75rem;
     }
     
     .suggestion-chips {
         padding: 0;
+    }
+    
+    .chip {
+        padding: 0.3rem 0.6rem;
+        font-size: 0.8rem;
     }
 }

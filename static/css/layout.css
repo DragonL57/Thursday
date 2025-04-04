@@ -7,12 +7,12 @@
 
 .app-header {
     height: var(--header-height);
-    background-color: var(--surface-color);
+    background-color: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1.5rem;
+    padding: 0 1rem;
     position: sticky;
     top: 0;
     z-index: 10;
@@ -21,15 +21,15 @@
 .logo {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
 }
 
 .logo-icon {
-    font-size: 1.5rem;
+    font-size: 1.2rem;
 }
 
 .logo h1 {
-    font-size: 1.2rem;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -51,35 +51,36 @@
 .sidebar {
     width: var(--sidebar-width);
     background-color: var(--sidebar-bg);
-    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    transition: transform 0.3s ease, var(--transition);
+    transition: transform 0.3s ease;
     z-index: 5;
+    color: #ffffff;
 }
 
 .sidebar-header {
-    padding: 1.25rem;
-    border-bottom: 1px solid var(--border-color);
+    padding: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
 .sidebar-header h3 {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .conversation-list {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem;
+    padding: 0.5rem;
 }
 
 .sidebar-footer {
-    padding: 1rem;
-    border-top: 1px solid var(--border-color);
+    padding: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -89,15 +90,16 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .user-avatar {
-    color: var(--text-tertiary);
+    color: rgba(255, 255, 255, 0.7);
 }
 
 .user-name {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
 }
 
 /* Chat container */
@@ -107,11 +109,19 @@
     flex-direction: column;
     position: relative;
     background-color: var(--bg-color);
+    width: 100%; /* Ensure full width */
 }
 
 .messages {
     flex: 1;
     overflow-y: auto;
-    padding: 1.5rem 1rem;
+    padding: 0;
     scroll-behavior: smooth;
+    width: 100%; /* Ensure full width */
+}
+
+.message-thread {
+    display: flex;
+    flex-direction: column;
+    width: 100%; /* Ensure full width */
 }

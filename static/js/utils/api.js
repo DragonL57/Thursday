@@ -110,11 +110,25 @@ export async function sendChatMessage(message, imageData = null, onToolCall, onF
     }
 }
 
+// Add AbortController to handle request cancellation
+let currentController = null;
+
+/**
+ * Abort the current request if one is in progress
+ */
+export function abortCurrentRequest() {
+    if (currentController) {
+        currentController.abort();
+        currentController = null;
+    }
+}
+
 /**
  * Stream chat messages using server-sent events
  * @param {string} message - The message to send
  * @param {string|null} imageData - Optional base64 image data
  * @param {Object} callbacks - Callback functions for different events
+ * @param {Function} callbacks.onToken - Called when a token is received (for incremental updates)
  * @param {Function} callbacks.onToolCall - Called when a tool call is received
  * @param {Function} callbacks.onToolUpdate - Called when a tool call is updated
  * @param {Function} callbacks.onFinalResponse - Called when the final response is received
@@ -123,7 +137,11 @@ export async function sendChatMessage(message, imageData = null, onToolCall, onF
  * @returns {Promise<void>}
  */
 export async function streamChatMessage(message, imageData = null, callbacks = {}) {
-    const { onToolCall, onToolUpdate, onFinalResponse, onError, onDone } = callbacks;
+    const { onToken, onToolCall, onToolUpdate, onFinalResponse, onError, onDone } = callbacks;
+    
+    // Create a new AbortController for this request
+    currentController = new AbortController();
+    const signal = currentController.signal;
     
     try {
         // Construct request payload with or without image
@@ -135,7 +153,8 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
         const response = await fetch('/chat/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal // Add the abort signal
         });
         
         if (!response.ok) {
@@ -147,6 +166,7 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
         const decoder = new TextDecoder();
         
         let buffer = '';
+        let currentContent = '';
         
         while (true) {
             const { value, done } = await reader.read();
@@ -173,6 +193,13 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
                         
                         // Handle different event types
                         switch (parsedData.event) {
+                            case 'token':
+                                if (typeof onToken === 'function') {
+                                    onToken(parsedData.data);
+                                    currentContent += parsedData.data;
+                                }
+                                break;
+                                
                             case 'tool_call':
                                 if (typeof onToolCall === 'function') {
                                     onToolCall(parsedData.data);
@@ -212,10 +239,22 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
             }
         }
     } catch (error) {
-        console.error('Error streaming chat message:', error);
-        if (typeof onError === 'function') {
-            onError(error.message);
+        // Check if this is an abort error
+        if (error.name === 'AbortError') {
+            console.log('Request was aborted');
+        } else {
+            console.error('Error streaming chat message:', error);
+            if (typeof onError === 'function') {
+                onError(error.message);
+            }
         }
+        
+        if (typeof onDone === 'function') {
+            onDone();
+        }
+    } finally {
+        // Clear the current controller reference
+        currentController = null;
     }
 }
 

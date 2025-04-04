@@ -172,6 +172,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
+    // Remove the input event listener that hides welcome message while typing
+    // Keep only the form submission event to hide welcome message
+    const welcomeMessage = document.getElementById('welcomeMessage');
+    
+    // Hide welcome message only on form submission, not while typing
+    elements.messageForm.addEventListener('submit', (e) => {
+        if (welcomeMessage) {
+            welcomeMessage.classList.add('hidden');
+        }
+    }, { once: true });
+    
     // Initialize UI
     elements.userInput.focus();
     adjustTextareaHeight(elements.userInput, elements.sendButton);
