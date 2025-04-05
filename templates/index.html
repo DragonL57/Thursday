@@ -29,38 +29,10 @@
                 <button id="toggleTheme" class="icon-button" title="Toggle dark mode">
                     <span class="material-icons-round">dark_mode</span>
                 </button>
-                <button id="toggleSidebar" class="icon-button mobile-only" title="Toggle menu">
-                    <span class="material-icons-round">menu</span>
-                </button>
             </div>
         </header>
 
         <div class="app-body">
-            <aside class="sidebar">
-                <div class="sidebar-header">
-                    <h3>Conversations</h3>
-                    <button id="newChat" class="icon-button">
-                        <span class="material-icons-round">add</span>
-                    </button>
-                </div>
-                <div class="conversation-list" id="conversationList">
-                    <!-- Conversations will be populated here -->
-                    <div class="conversation active">
-                        <span class="material-icons-round">chat</span>
-                        <span class="conversation-title">New conversation</span>
-                    </div>
-                </div>
-                <div class="sidebar-footer">
-                    <div class="user-info">
-                        <span class="material-icons-round user-avatar">account_circle</span>
-                        <span class="user-name">User</span>
-                    </div>
-                    <button id="settingsButton" class="icon-button" title="Settings">
-                        <span class="material-icons-round">settings</span>
-                    </button>
-                </div>
-            </aside>
-
             <main class="chat-container">
                 <div class="messages" id="messages">
                     <div class="message-group assistant-message welcome-message" id="welcomeMessage">
@@ -76,7 +48,7 @@
                 </div>
                 
                 <div class="input-container">
-                    <form id="messageForm">
+                    <form id="messageForm" onsubmit="console.log('Form submitted via onsubmit attribute'); return false;">
                         <div class="input-wrapper">
                             <textarea 
                                 id="userInput" 
@@ -89,7 +61,7 @@
                                 <button type="button" id="attachButton" class="icon-button" title="Attach a file">
                                     <span class="material-icons-round">attach_file</span>
                                 </button>
-                                <button type="submit" id="sendButton" class="send-button" disabled>
+                                <button type="submit" id="sendButton" class="send-button">
                                     <span class="material-icons-round">send</span>
                                 </button>
                             </div>

@@ -18,25 +18,37 @@ export class SettingsManager {
     }
     
     init() {
-        // Open settings modal
-        this.settingsButton.addEventListener('click', () => {
-            this.settingsModal.classList.add('active');
-        });
+        // Open settings modal - only if settingsButton exists
+        if (this.settingsButton) {
+            this.settingsButton.addEventListener('click', () => {
+                if (this.settingsModal) {
+                    this.settingsModal.classList.add('active');
+                }
+            });
+        }
         
         // Close settings modal
-        this.closeModalButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                this.settingsModal.classList.remove('active');
+        if (this.closeModalButtons) {
+            this.closeModalButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    if (this.settingsModal) {
+                        this.settingsModal.classList.remove('active');
+                    }
+                });
             });
-        });
+        }
         
         // Update temperature value display
-        this.temperatureSlider.addEventListener('input', () => {
-            this.temperatureValue.textContent = this.temperatureSlider.value;
-        });
+        if (this.temperatureSlider && this.temperatureValue) {
+            this.temperatureSlider.addEventListener('input', () => {
+                this.temperatureValue.textContent = this.temperatureSlider.value;
+            });
+        }
         
         // Save settings
-        this.saveSettingsButton.addEventListener('click', () => this.saveSettings());
+        if (this.saveSettingsButton) {
+            this.saveSettingsButton.addEventListener('click', () => this.saveSettings());
+        }
     }
     
     async fetchCurrentSettings() {

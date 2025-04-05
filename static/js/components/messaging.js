@@ -3,35 +3,58 @@ import { adjustTextareaHeight, scrollToBottom } from '../utils/dom.js';
 
 export class MessagingComponent {
     constructor(elements) {
+        // Store elements
         this.userInput = elements.userInput;
         this.sendButton = elements.sendButton;
         this.messagesContainer = elements.messagesContainer;
         this.messageForm = elements.messageForm;
         this.loadingIndicator = elements.loadingIndicator;
+        this.imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        
+        // State variables
         this.isProcessing = false;
-        this.currentAssistantMessage = null; // Track the current assistant message being generated
-        
-        // Track image attachments
+        this.abortController = null;
         this.currentImageData = null;
-        this.imagePreviewContainer = elements.imagePreviewContainer || document.getElementById('imagePreviewContainer');
         
+        // Initialize events
         this.initEvents();
+        
+        console.log('MessagingComponent initialized');
     }
     
     initEvents() {
-        // Form submission handler
+        if (!this.messageForm) {
+            console.error('Message form not found - cannot initialize events');
+            return;
+        }
+        
+        console.log('Setting up form submission handler');
+        
+        // Form submission handler with error handling
         this.messageForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            console.log('Form submitted');
             
-            // If we're already processing, this means we want to stop generation
-            if (this.isProcessing) {
-                this.stopGeneration();
-                return;
-            }
-            
-            const message = this.userInput.value.trim();
-            if ((message || this.currentImageData) && !this.isProcessing) {
-                await this.sendMessage(message);
+            try {
+                // If we're already processing, this means we want to stop generation
+                if (this.isProcessing) {
+                    console.log('Stopping generation');
+                    this.stopGeneration();
+                    return;
+                }
+                
+                const message = this.userInput.value.trim();
+                console.log(`Message: "${message}", Image data present: ${!!this.currentImageData}`);
+                
+                if ((message || this.currentImageData) && !this.isProcessing) {
+                    await this.sendMessage(message);
+                } else {
+                    console.log('No message or image to send, or already processing');
+                }
+            } catch (error) {
+                console.error('Error in form submission handler:', error);
+                this.isProcessing = false;
+                this.setGeneratingState(false);
             }
         });
         
