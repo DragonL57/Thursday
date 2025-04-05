@@ -68,8 +68,15 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
     
     # Process each tool call
     has_errors = False
+    processed_tool_ids = set()  # NEW: Track which tool calls we've processed
     
     # Log recursion depth for debugging
+    max_recursion_depth = 3  # Limit recursive depth to avoid infinite loops
+    if recursion_depth > max_recursion_depth:
+        print(f"{Fore.RED}Maximum tool call recursion depth reached ({max_recursion_depth}). Stopping further tool calls.{Style.RESET_ALL}")
+        return {"text": "Maximum tool call depth reached. I'll stop here and provide my current understanding.", 
+                "tool_calls": assistant.current_tool_calls}
+    
     if recursion_depth > 0:
         print(f"{Fore.CYAN}Tool call recursion depth: {recursion_depth}/{max_recursion_depth}{Style.RESET_ALL}")
     
@@ -77,6 +84,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         function_name = tool_call["function"]["name"]
         function_to_call = assistant.available_functions.get(function_name)
         tool_id = tool_call["id"]
+        processed_tool_ids.add(tool_id)  # NEW: Mark this tool as processed
         
         # Check if the function exists
         if function_to_call is None:
@@ -135,6 +143,23 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
             print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
             assistant.add_toolcall_output(tool_id, function_name, err_msg)
             has_errors = True
+    
+    # NEW: Ensure all tool calls have responses before continuing
+    # Check if any tool calls in current_tool_calls don't have responses yet
+    if hasattr(assistant, 'current_tool_calls'):
+        for tool_call in assistant.current_tool_calls:
+            if tool_call.get("id") not in processed_tool_ids and tool_call.get("result") is None:
+                tool_id = tool_call.get("id")
+                function_name = tool_call.get("name", "unknown_tool")
+                print(f"{Fore.YELLOW}WARNING: Tool call {tool_id} ({function_name}) has no response. Adding error response.{Style.RESET_ALL}")
+                
+                # Add an error response
+                assistant.add_toolcall_output(
+                    tool_id,
+                    function_name,
+                    "Error: Tool execution was skipped or failed. Please try again."
+                )
+                has_errors = True
     
     # If we had errors and have retries left, try again with a new API call
     if has_errors and validation_retries > 0:

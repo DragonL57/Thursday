@@ -66,6 +66,41 @@ def chat_stream():
         
         user_assistant = assistants[session_id]
 
+        # NEW: Validate the message history before adding the new user message
+        # Check if there are pending tool calls that need responses
+        if hasattr(user_assistant, 'messages') and len(user_assistant.messages) > 0:
+            # Check if the last message is from the assistant with tool calls
+            last_message = user_assistant.messages[-1]
+            if last_message.get('role') == 'assistant' and 'tool_calls' in last_message:
+                # Get the tool call IDs from the last message
+                pending_tool_calls = {tc['id'] for tc in last_message.get('tool_calls', [])}
+                
+                # Check which tool calls have responses
+                responded_tool_calls = set()
+                for msg in user_assistant.messages:
+                    if msg.get('role') == 'tool':
+                        responded_tool_calls.add(msg.get('tool_call_id'))
+                
+                # Find missing tool responses
+                missing_tool_calls = pending_tool_calls - responded_tool_calls
+                if missing_tool_calls:
+                    # This is a serious issue - we need to add the missing tool responses
+                    for tool_call_id in missing_tool_calls:
+                        print(f"WARNING: Adding missing tool response for {tool_call_id}")
+                        # Find the corresponding tool call to get the name
+                        tool_name = "unknown_tool"
+                        for tc in last_message.get('tool_calls', []):
+                            if tc['id'] == tool_call_id:
+                                tool_name = tc.get('function', {}).get('name', 'unknown_tool')
+                                break
+                                
+                        # Add a placeholder response
+                        user_assistant.add_toolcall_output(
+                            tool_call_id,
+                            tool_name,
+                            "Error: Tool execution was not completed properly. Please try again."
+                        )
+
         # Prepare image data if provided
         images = None
         if image_data:

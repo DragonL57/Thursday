@@ -425,7 +425,6 @@ export class MessagingComponent {
         messageGroup.innerHTML = `
             <div class="message-content">
                 <div class="message-content-container">
-                    <div class="tool-status-indicator ${toolCall.status}" title="${toolCall.status}"></div>
                     <div class="message-bubble tool-message-bubble" data-tool-id="tool-call-${toolCall.id}">
                         <div class="tool-execution">
                             <div class="tool-command">
@@ -503,11 +502,7 @@ export class MessagingComponent {
         const toolMessage = document.querySelector(`.tool-message .message-bubble[data-tool-id="${toolCallId}"]`);
         
         if (toolMessage) {
-            const statusIndicator = toolMessage.closest('.message-content').querySelector('.tool-status-indicator');
-            if (statusIndicator) {
-                statusIndicator.className = `tool-status-indicator ${toolCall.status}`;
-                statusIndicator.title = toolCall.status;
-            }
+            // ...existing code...
             
             // Update tool command display if it's empty
             const commandElement = toolMessage.querySelector('.tool-command code');
