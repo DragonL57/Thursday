@@ -1,13 +1,14 @@
 from flask import Flask, render_template, request, jsonify, session, Response
 import config as conf
 from tools import TOOLS  # Import the tools
-from assistant import Assistant  # Import the Assistant class
+from assistant import Assistant  # Import from the new package
 import os
 import json
 import time
 import base64
 import re
-import random  # Add the missing import
+import random
+import traceback  # Add this import for stack traces
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Secure secret key for session management
@@ -102,84 +103,258 @@ def chat_stream():
 
         def generate():
             # Send an event indicating the start of processing
-            yield f"data: {json.dumps({'event': 'start'})}\n\n"
+            yield f"data: {json.dumps({'event': 'start'})}\n\n".encode('utf-8')
             
             try:
-                # Start processing and track tool calls
-                user_assistant.prepare_message(user_message, images)
+                # Use a non-streaming approach for the initial response
+                print(f"Initial call with message: {user_message}")
                 
-                # Stream tool calls as they are executed
-                tool_calls_seen = set()
-                max_wait_time = 60  # Maximum wait time in seconds
-                start_time = time.time()
-                
-                while user_assistant.is_processing and (time.time() - start_time < max_wait_time):
-                    try:
-                        current_tools = user_assistant.get_current_tool_calls()
-                        for tool_call in current_tools:
-                            tool_id = tool_call.get('id')
-                            if tool_id and tool_id not in tool_calls_seen:
-                                # New tool call
-                                yield f"data: {json.dumps({'event': 'tool_call', 'data': tool_call})}\n\n"
-                                tool_calls_seen.add(tool_id)
-                            elif tool_id in tool_calls_seen:
-                                # Tool call was updated
-                                yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n"
-                    except Exception as tool_err:
-                        print(f"Error processing tool calls: {tool_err}")
-                    
-                    time.sleep(0.1)  # Short sleep to avoid CPU thrashing
-                
-                # Get the final response after all tools have been executed
-                try:
-                    final_response = user_assistant.get_final_response()
-                except AttributeError:
-                    # Handle the case where get_final_response isn't defined
-                    final_response = "Sorry, there was a problem retrieving the final response."
-                    if hasattr(user_assistant, 'messages') and user_assistant.messages:
-                        # Try to get the last assistant message as fallback
-                        for msg in reversed(user_assistant.messages):
-                            if isinstance(msg, dict) and msg.get("role") == "assistant" and "content" in msg:
-                                final_response = msg["content"]
-                                break
-                
-                # Check if we timed out
-                if time.time() - start_time >= max_wait_time:
-                    timeout_msg = "Request processing took too long. Please try again with a simpler request or smaller image."
-                    yield f"data: {json.dumps({'event': 'error', 'data': timeout_msg})}\n\n"
-                # Check if the response contains an error message about rate limits
-                elif isinstance(final_response, str) and "rate limit" in final_response.lower():
-                    # Send a more user-friendly rate limit error
-                    error_msg = "The image processing request was rate limited. Please try again in a few minutes or use a smaller image."
-                    yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n"
+                # Add the user message to the assistant's history
+                if images:
+                    print(f"DEBUG: Adding user message with {len(images)} images")
+                    content = [{"type": "text", "text": user_message}]
+                    content.extend(images)
+                    user_assistant.messages.append({"role": "user", "content": content})
                 else:
-                    # Send the final response
-                    # Split the response into chunks/tokens for streaming
-                    chunks = chunk_text(final_response)
-                    for chunk in chunks:
-                        yield f"data: {json.dumps({'event': 'token', 'data': chunk})}\n\n"
-                        time.sleep(0.01)  # Small delay to simulate typing
+                    print(f"DEBUG: Adding user message with text only")
+                    user_assistant.messages.append({"role": "user", "content": user_message})
+                
+                # Make the initial API call without streaming to detect tool calls
+                try:
+                    print("DEBUG: Making initial API call to detect tool calls")
+                    response = user_assistant.api_client._make_api_request(
+                        messages=user_assistant.messages,
+                        tools=user_assistant.tools,
+                        stream=False
+                    )
                     
-                    # Also send the final complete response
-                    yield f"data: {json.dumps({'event': 'final', 'data': final_response})}\n\n"
+                    if not response:
+                        error_msg = "Failed to get a response from the API server"
+                        print(f"ERROR: {error_msg}")
+                        yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n".encode('utf-8')
+                        yield f"data: {json.dumps({'event': 'done'})}\n\n".encode('utf-8')
+                        return
+                    
+                    # Extract the response content and any tool calls
+                    if "choices" in response and response["choices"] and "message" in response["choices"][0]:
+                        message = response["choices"][0]["message"]
+                        
+                        # Check if the message has content
+                        text_content = message.get("content", "")
+                        
+                        # Check if there are tool calls
+                        tool_calls = message.get("tool_calls", [])
+                        
+                        if tool_calls:
+                            print(f"DEBUG: Found {len(tool_calls)} tool calls to execute")
+                            
+                            # Store the tool calls for processing
+                            user_assistant.current_tool_calls = []
+                            
+                            # Add assistant message with tool calls to conversation history
+                            user_assistant.messages.append(message)
+                            
+                            for tc in tool_calls:
+                                # Process each tool call from the response
+                                tool_id = tc.get("id", "")
+                                function_data = tc.get("function", {})
+                                function_name = function_data.get("name", "")
+                                arguments_str = function_data.get("arguments", "{}")
+                                
+                                # Store the tool call in our standardized format
+                                tool_call = {
+                                    "id": tool_id,
+                                    "name": function_name,
+                                    "args": arguments_str,
+                                    "status": "pending",
+                                    "result": None
+                                }
+                                
+                                # Add to current tool calls list
+                                user_assistant.current_tool_calls.append(tool_call)
+                                
+                                # Send the tool call to the client
+                                tool_call_data = {
+                                    'id': tool_id,
+                                    'name': function_name,
+                                    'args': arguments_str,
+                                    'status': 'pending'
+                                }
+                                
+                                yield f"data: {json.dumps({'event': 'tool_call', 'data': tool_call_data})}\n\n".encode('utf-8')
+                            
+                            # Now execute all the tool calls
+                            
+                            for tool_call in user_assistant.current_tool_calls:
+                                try:
+                                    # Execute the tool
+                                    function_name = tool_call['name']
+                                    arguments_str = tool_call['args']
+                                    function_args = json.loads(arguments_str) if arguments_str else {}
+                                    
+                                    function_to_call = user_assistant.available_functions.get(function_name)
+                                    
+                                    if function_to_call:
+                                        # Execute the function
+                                        print(f"DEBUG: Executing tool {function_name}")
+                                        tool_result = function_to_call(**function_args)
+                                        
+                                        # Convert tool result to string if it's not already
+                                        if not isinstance(tool_result, str):
+                                            try:
+                                                # If it's a list or dict, serialize it properly to valid JSON
+                                                if isinstance(tool_result, (list, dict)):
+                                                    tool_result = json.dumps(tool_result, ensure_ascii=False)
+                                                else:
+                                                    tool_result = str(tool_result)
+                                            except:
+                                                tool_result = str(tool_result)
+                                        else:
+                                            # If it's already a string but looks like a Python repr, try to convert to valid JSON
+                                            if tool_result.startswith('[') and ("'" in tool_result or "False" in tool_result or "True" in tool_result):
+                                                try:
+                                                    # Try to safely evaluate and convert to proper JSON
+                                                    import ast
+                                                    parsed_result = ast.literal_eval(tool_result)
+                                                    tool_result = json.dumps(parsed_result, ensure_ascii=False)
+                                                except:
+                                                    # Keep as is if conversion fails
+                                                    pass
+                                        
+                                        # Update tool call status
+                                        tool_call['status'] = 'completed'
+                                        tool_call['result'] = tool_result
+                                        
+                                        # Send tool update to client
+                                        yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n".encode('utf-8')
+                                        
+                                        # Add tool result to message history
+                                        user_assistant.add_toolcall_output(
+                                            tool_call['id'],
+                                            function_name,
+                                            tool_result
+                                        )
+                                    else:
+                                        raise ValueError(f"Function {function_name} not found in available tools")
+                                except Exception as e:
+                                    # Handle errors in tool execution
+                                    error_message = f"Error executing tool {function_name}: {str(e)}"
+                                    print(f"ERROR: Tool execution error: {error_message}")
+                                    traceback.print_exc()  # Print the full stack trace for debugging
+                                    
+                                    tool_call['status'] = 'error'
+                                    tool_call['result'] = error_message
+                                    
+                                    # Send error update to client
+                                    yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n".encode('utf-8')
+                                    
+                                    # Add error to message history
+                                    user_assistant.add_toolcall_output(
+                                        tool_call['id'],
+                                        function_name,
+                                        error_message
+                                    )
+                            
+                            # Now that all tools are executed, make a final API call to get the final response
+                            # Send info event with a special flag to indicate it should be removed when response arrives
+                            yield f"data: {json.dumps({'event': 'info', 'data': 'Getting AI response based on tool results...', 'temp': True})}\n\n".encode('utf-8')
+                            
+                            try:
+                                # Make a second API call to get the final response
+                                final_response = user_assistant.api_client._make_api_request(
+                                    messages=user_assistant.messages,
+                                    tools=user_assistant.tools,
+                                    stream=False
+                                )
+                                
+                                if final_response and "choices" in final_response and final_response["choices"] and "message" in final_response["choices"][0]:
+                                    final_message = final_response["choices"][0]["message"]
+                                    final_content = final_message.get("content", "")
+                                    
+                                    # Add the final response to conversation history
+                                    user_assistant.messages.append(final_message)
+                                    
+                                    # Stream the final response to the client in chunks
+                                    if final_content:
+                                        # First, send a clear_temp_info event to remove the temporary message
+                                        yield f"data: {json.dumps({'event': 'clear_temp_info'})}\n\n".encode('utf-8')
+                                        
+                                        chunks = chunk_text(final_content, avg_chunk_size=5)
+                                        for chunk in chunks:
+                                            yield f"data: {json.dumps({'event': 'token', 'data': chunk})}\n\n".encode('utf-8')
+                                            time.sleep(0.01)  # Small delay between chunks
+                                    else:
+                                        # Handle the case where there is no content in the final response
+                                        # First, send a clear_temp_info event to remove the temporary message
+                                        yield f"data: {json.dumps({'event': 'clear_temp_info'})}\n\n".encode('utf-8')
+                                        
+                                        fallback_response = "I've processed the information, but I don't have anything additional to add."
+                                        yield f"data: {json.dumps({'event': 'token', 'data': fallback_response})}\n\n".encode('utf-8')
+                                else:
+                                    # First, send a clear_temp_info event to remove the temporary message
+                                    yield f"data: {json.dumps({'event': 'clear_temp_info'})}\n\n".encode('utf-8')
+                                    
+                                    error_msg = "Failed to get a final response from the API"
+                                    print(f"ERROR: {error_msg}")
+                                    fallback_response = "I've executed the requested tools, but couldn't generate a proper response."
+                                    yield f"data: {json.dumps({'event': 'token', 'data': fallback_response})}\n\n".encode('utf-8')
+                            except Exception as e:
+                                # First, send a clear_temp_info event to remove the temporary message
+                                yield f"data: {json.dumps({'event': 'clear_temp_info'})}\n\n".encode('utf-8')
+                                
+                                error_msg = f"Error getting final response: {str(e)}"
+                                print(f"ERROR: {error_msg}")
+                                traceback.print_exc()
+                                fallback_response = "I've executed the tools but encountered an error preparing the response."
+                                yield f"data: {json.dumps({'event': 'token', 'data': fallback_response})}\n\n".encode('utf-8')
+                        
+                        elif text_content:
+                            # No tool calls, just stream the text content
+                            print(f"DEBUG: No tool calls, just returning text content")
+                            user_assistant.messages.append({
+                                "role": "assistant",
+                                "content": text_content
+                            })
+                            
+                            # Stream the response to the client in chunks
+                            chunks = chunk_text(text_content, avg_chunk_size=5)
+                            for chunk in chunks:
+                                yield f"data: {json.dumps({'event': 'token', 'data': chunk})}\n\n".encode('utf-8')
+                                time.sleep(0.01)  # Small delay between chunks
+                        else:
+                            # No content at all
+                            error_msg = "The API response didn't contain any content"
+                            print(f"ERROR: {error_msg}")
+                            yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n".encode('utf-8')
+                    else:
+                        # No valid response from API
+                        error_msg = "Received an invalid response format from the API"
+                        print(f"ERROR: {error_msg}")
+                        yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n".encode('utf-8')
+                
+                except Exception as api_error:
+                    # Handle API request errors
+                    error_msg = f"Error making API request: {str(api_error)}"
+                    print(f"ERROR: {error_msg}")
+                    traceback.print_exc()
+                    yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n".encode('utf-8')
                 
             except Exception as e:
+                # Handle any other errors in the processing
                 error_message = str(e)
+                print(f"CRITICAL: Exception in chat stream: {error_message}")
+                traceback.print_exc()
+                
                 if "429" in error_message or "rate limit" in error_message.lower():
                     user_friendly_error = "Rate limit exceeded. Please try again in a few minutes or use a smaller image."
-                    yield f"data: {json.dumps({'event': 'error', 'data': user_friendly_error})}\n\n"
+                    yield f"data: {json.dumps({'event': 'error', 'data': user_friendly_error})}\n\n".encode('utf-8')
                 else:
-                    yield f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n"
+                    yield f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n".encode('utf-8')
             
-            # Make sure user_assistant.is_processing is set to False in case of exceptions
-            if hasattr(user_assistant, 'is_processing'):
-                user_assistant.is_processing = False
+            # Always send done event at the end
+            yield f"data: {json.dumps({'event': 'done'})}\n\n".encode('utf-8')
             
-            # Send end of stream
-            yield f"data: {json.dumps({'event': 'done'})}\n\n"
-        
         return Response(generate(), mimetype='text/event-stream')
-
     except Exception as e:
         print(f"Error during chat streaming: {e}")
         # Return error as a stream event
@@ -187,12 +362,12 @@ def chat_stream():
         if "429" in error_message or "rate limit" in error_message.lower():
             user_friendly_error = "Rate limit exceeded. Please try again in a few minutes or use a smaller image."
             return Response(
-                f"data: {json.dumps({'event': 'error', 'data': user_friendly_error})}\n\n",
+                f"data: {json.dumps({'event': 'error', 'data': user_friendly_error})}\n\n".encode('utf-8'),
                 mimetype='text/event-stream'
             )
         else:
             return Response(
-                f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n",
+                f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n".encode('utf-8'),
                 mimetype='text/event-stream'
             )
 
@@ -200,7 +375,7 @@ def chunk_text(text, avg_chunk_size=3):
     """Split text into smaller chunks for streaming."""
     if not text:
         return []
-        
+    
     # Split by spaces but preserve them
     parts = []
     current = ""
@@ -275,7 +450,7 @@ def chat():
                     "url": image_data
                 }
             }]
-
+        
         # Send message to the assistant and get the response
         assistant_response = user_assistant.send_message(user_message, images)
         
@@ -289,7 +464,6 @@ def chat():
         else:
             # Fallback for backward compatibility
             return jsonify({"response": assistant_response})
-
     except Exception as e:
         print(f"Error during chat processing: {e}")
         # Potentially log the full traceback here
@@ -331,15 +505,34 @@ def update_settings():
     except Exception as e:
         return jsonify({"error": f"Failed to update settings: {str(e)}"}), 500
 
-@app.route('/api/settings', methods=['GET'])
-def get_settings():
-    """Return the current settings from config."""
-    return jsonify({
+@app.route('/api/settings', methods=['GET', 'POST'])
+def handle_settings():
+    if request.method == 'POST':
+        data = request.json
+        
+        # Update the global assistant with new settings
+        if data.get('model') and assistant:
+            assistant.model = data.get('model')
+            
+        # Store settings in session
+        session['settings'] = {
+            'model': data.get('model', conf.MODEL),
+            'temperature': data.get('temperature', conf.TEMPERATURE),
+            'max_tokens': data.get('max_tokens', conf.MAX_TOKENS),
+            'save_history': data.get('save_history', getattr(conf, 'SAVE_HISTORY', False))
+        }
+        
+        return jsonify({"status": "success", "message": "Settings updated"})
+    
+    # GET request - return current settings
+    settings = session.get('settings', {
         'model': conf.MODEL,
         'temperature': conf.TEMPERATURE,
         'max_tokens': conf.MAX_TOKENS,
-        'save_history': conf.SAVE_HISTORY if hasattr(conf, 'SAVE_HISTORY') else True
+        'save_history': getattr(conf, 'SAVE_HISTORY', False)
     })
+    
+    return jsonify(settings)
 
 if __name__ == '__main__':
     # Generate a proper secret key for production

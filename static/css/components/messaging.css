@@ -605,3 +605,22 @@
 }
 
 /* DELETE ALL OTHER CONFLICTING IMAGE STYLES BELOW THIS LINE */
+
+/* Tool call styles and positioning */
+.tool-message {
+    margin-bottom: 0.25rem; /* Reduce the margin to make it closer to the assistant message */
+}
+
+.temp-info {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background-color: rgba(var(--accent-color-rgb), 0.1);
+    display: inline-block;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}

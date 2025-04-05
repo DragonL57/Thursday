@@ -668,3 +668,554 @@
 .katex .mord.text {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
+/* Message component styles */
+.message-group {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    position: relative;
+}
+
+.user-message {
+    background-color: var(--bg-color);
+}
+
+.assistant-message {
+    background-color: var(--surface-color);
+}
+
+.tool-message {
+    background-color: var(--surface-color);
+    padding: 0.5rem 1rem;
+}
+
+.message-content {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.message-content-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.message-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+}
+
+.message-bubble {
+    padding: 0.5rem 0;
+    border-radius: var(--border-radius);
+    flex: 1;
+    color: var(--text-primary);
+    overflow: hidden;
+}
+
+.message-bubble h1 {
+    font-size: 1.75rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.message-bubble h2 {
+    font-size: 1.5rem;
+    margin-top: 1.25rem;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.message-bubble h3 {
+    font-size: 1.25rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.message-bubble h4, h5, h6 {
+    font-size: 1.1rem;
+    margin-top: 0.75rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.message-bubble p {
+    margin-bottom: 0.75rem;
+    line-height: 1.6;
+}
+
+.message-bubble ul, .message-bubble ol {
+    margin-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.message-bubble li {
+    margin-bottom: 0.5rem;
+}
+
+.message-bubble pre {
+    max-width: 100%;
+    overflow-x: auto;
+    border-radius: var(--border-radius);
+    margin: 1rem 0;
+}
+
+.message-bubble code {
+    font-family: 'Fira Code', monospace;
+    background-color: var(--code-bg);
+    color: var(--code-color);
+    border-radius: 3px;
+    padding: 0.1rem 0.2rem;
+    font-size: 0.9em;
+}
+
+.message-bubble pre code {
+    padding: 1rem;
+    display: block;
+    background-color: var(--code-bg);
+    color: var(--code-color);
+    white-space: pre;
+}
+
+.message-bubble blockquote {
+    border-left: 4px solid var(--primary-color);
+    padding-left: 1rem;
+    margin-left: 0;
+    margin-right: 0;
+    font-style: italic;
+    color: var(--text-secondary);
+}
+
+.message-bubble a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+.message-bubble a:hover {
+    text-decoration: underline;
+}
+
+.message-bubble img {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--border-radius);
+    margin: 0.5rem 0;
+}
+
+.message-bubble table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+}
+
+.message-bubble th, .message-bubble td {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.message-bubble th {
+    background-color: rgba(0, 0, 0, 0.03);
+    font-weight: 600;
+}
+
+.message-bubble hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 1.5rem 0;
+}
+
+/* Thinking indicator */
+.message-thinking {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.typing-dots {
+    display: flex;
+    gap: 4px;
+}
+
+.dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--text-tertiary);
+    animation: pulse 1.5s infinite;
+    opacity: 0.6;
+}
+
+.dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+    }
+}
+
+/* Code block styling */
+.code-block {
+    position: relative;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    margin: 1rem 0;
+}
+
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 0.4rem 0.75rem;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.8rem;
+}
+
+.copy-code {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    transition: var(--transition);
+}
+
+.copy-code:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.language-indicator {
+    opacity: 0.7;
+    font-size: 0.75rem;
+}
+
+/* Tool Calls */
+.tool-execution {
+    padding: 0.5rem 0;
+}
+
+.tool-command {
+    font-family: monospace;
+    font-size: 0.9rem;
+    margin-bottom: 0.2rem;
+    color: var(--primary-color);
+}
+
+.tool-result {
+    margin-top: 0.3rem;
+    border-top: 1px dotted var(--border-color);
+    padding-top: 0.1rem; /* Minimal padding */
+    margin-top: 0.1rem; /* Minimal margin */
+    font-size: 0.75rem; /* Smaller font */
+}
+
+.tool-result pre {
+    margin: 0;
+    max-height: 150px;
+    overflow-y: auto;
+    background-color: rgba(0, 0, 0, 0.01); /* Even more subtle background */
+    padding: 0.15rem; /* Minimal padding */
+    border-radius: calc(var(--border-radius) - 3px);
+}
+
+.tool-result pre code {
+    font-size: 0.7rem; /* Smallest reasonably readable font */
+    line-height: 1.1; /* Very tight line height */
+    padding: 0;
+    white-space: pre-wrap; /* Allow wrapping for better mobile display */
+}
+
+/* For single-line outputs, make them even more compact */
+.tool-result.single-line pre {
+    padding: 0.1rem 0.15rem;
+}
+
+.tool-result.single-line pre code {
+    white-space: nowrap; /* No wrapping for single lines */
+}
+
+.tool-result.hidden {
+    display: none;
+}
+
+/* Tool status indicators */
+.tool-status-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin: 0 0.5rem;
+}
+
+.tool-status-indicator.pending {
+    background-color: var(--text-tertiary);
+}
+
+.tool-status-indicator.completed {
+    background-color: var(--primary-color);
+}
+
+.tool-status-indicator.error {
+    background-color: #ef4444;
+}
+
+/* Tool call standalone style */
+.tool-call {
+    margin-bottom: 1rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.tool-call.pending {
+    border-left: 3px solid var(--text-tertiary);
+}
+
+.tool-call.completed {
+    border-left: 3px solid var(--primary-color);
+}
+
+.tool-call.error {
+    border-left: 3px solid #ef4444;
+}
+
+.tool-call-header {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-bottom: 1px solid var(--border-color);
+    gap: 0.5rem;
+}
+
+.tool-call-icon {
+    font-size: 1rem;
+}
+
+.tool-call-name {
+    font-family: monospace;
+    font-weight: 500;
+    flex-grow: 1;
+}
+
+.tool-call-status {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+}
+
+.tool-call.pending .tool-call-status {
+    background-color: var(--text-tertiary);
+    color: white;
+}
+
+.tool-call.completed .tool-call-status {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.tool-call.error .tool-call-status {
+    background-color: #ef4444;
+    color: white;
+}
+
+.tool-call-body {
+    padding: 0.75rem;
+}
+
+.tool-call-args pre {
+    margin: 0;
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.25rem; /* Further reduced padding */
+    font-size: 0.7rem; /* Even smaller font */
+    color: var(--text-secondary);
+    overflow-x: auto;
+}
+
+.tool-call-result {
+    margin-top: 0.4rem;
+    border-top: 1px dotted var(--border-color);
+    padding-top: 0.3rem; /* Further reduced padding */
+}
+
+.tool-call-result.hidden {
+    display: none;
+}
+
+.tool-call-result-header {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.dark-mode .tool-call-args pre,
+.dark-mode .tool-call-result pre {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Tool message compact style */
+.tool-message.compact {
+    padding: 0.5rem 0;
+    margin: 0.5rem 0;
+}
+
+.tool-message .message-bubble {
+    background-color: rgba(147, 51, 234, 0.05);
+    padding: 0.5rem;
+    border: 1px solid rgba(147, 51, 234, 0.1);
+    border-radius: var(--border-radius);
+    border-color: rgba(147, 51, 234, 0.2);
+}
+
+/* Welcome message */
+.welcome-message {
+    text-align: center;
+}
+
+.conversation-list {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    max-height: calc(100vh - 60px);
+}
+
+.conversation {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    transition: var(--transition);
+}
+
+.conversation:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.conversation.active {
+    background-color: var(--highlight-bg);
+    color: var(--primary-color);
+}
+
+.conversation-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    font-size: 0.9rem;
+}
+
+/* LaTeX rendering styles */
+.latex-error {
+    color: var(--primary-color);
+    background-color: rgba(255, 0, 0, 0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+    border: 1px dashed var(--primary-color);
+    cursor: help;
+}
+
+/* Tool call styles */
+.tool-calls-container {
+    margin-top: 1rem;
+    border-top: 1px dashed var(--border-color);
+    padding-top: 0.75rem;
+}
+
+/* CLEAN IMPLEMENTATION: Image input and preview styles */
+.image-preview-container {
+    position: relative;
+    display: inline-block;
+    margin-right: 4px;
+    vertical-align: middle;
+    width: 80px !important;
+    height: 80px !important;
+    min-width: 80px !important;
+    min-height: 80px !important;
+    overflow: visible; /* Allow the remove button to overflow */
+}
+
+.image-preview {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.image-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.remove-image {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--error-color, red);
+    color: #fff;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+    padding: 0;
+}
+
+.message-image {
+    margin: 8px 0;
+    border-radius: var(--border-radius);
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.message-image img {
+    max-width: 100%;
+    max-height: 400px;
+    display: block;
+    border-radius: var(--border-radius);
+}
