@@ -120,10 +120,12 @@ def chat_stream():
                             tool_id = tool_call.get('id')
                             if tool_id and tool_id not in tool_calls_seen:
                                 # New tool call
+                                print(f"*** TOOL CALL EVENT: {tool_call['name']} (ID: {tool_id})")
                                 yield f"data: {json.dumps({'event': 'tool_call', 'data': tool_call})}\n\n"
                                 tool_calls_seen.add(tool_id)
                             elif tool_id in tool_calls_seen:
                                 # Tool call was updated
+                                print(f"*** TOOL UPDATE EVENT: {tool_call['name']} (status: {tool_call.get('status', 'unknown')})")
                                 yield f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n"
                     except Exception as tool_err:
                         print(f"Error processing tool calls: {tool_err}")
@@ -312,22 +314,20 @@ def update_settings():
         settings = request.json
         session_id = session.get('user_id', request.remote_addr)
         
-        # Update the config.py values
-        updated_settings = conf.update_config(settings)
+        if settings.get('model'):
+            # Update model if provided and different from current
+            new_model = settings['model']
+            if session_id in assistants:
+                assistants[session_id].model = new_model
         
-        # Update active assistant instances
-        if session_id in assistants:
-            if settings.get('model'):
-                assistants[session_id].model = settings['model']
-            
-            # Some models might allow temperature updates
-            if 'temperature' in settings and hasattr(assistants[session_id], 'set_temperature'):
-                try:
-                    assistants[session_id].set_temperature(float(settings['temperature']))
-                except (AttributeError, ValueError):
-                    pass
+        if 'temperature' in settings:
+            # Update temperature in config (would need proper implementation)
+            temp = float(settings['temperature'])
+            conf.TEMPERATURE = temp
         
-        return jsonify({"status": "Settings updated successfully", "settings": updated_settings})
+        # Other settings could be handled here
+        
+        return jsonify({"status": "Settings updated successfully"})
     except Exception as e:
         return jsonify({"error": f"Failed to update settings: {str(e)}"}), 500
 

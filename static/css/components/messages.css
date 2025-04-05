@@ -562,3 +562,36 @@
         opacity: 1;
     }
 }
+
+/* Enhanced Tool Call Styling */
+.tool-message {
+    margin: 1rem 0 !important;
+    position: relative;
+    z-index: 5; /* Ensure tool calls appear above other messages */
+}
+
+.tool-message-bubble {
+    background-color: rgba(255, 255, 255, 0.98) !important;
+    border-width: 3px !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15) !important;
+}
+
+.tool-status-indicator {
+    width: 16px !important;
+    height: 16px !important;
+    border: 2px solid white !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dark-mode .tool-message-bubble {
+    background-color: rgba(58, 58, 68, 0.98) !important;
+}
+
+.tool-result {
+    border-left-width: 6px !important;
+    background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+.dark-mode .tool-result {
+    background-color: rgba(0, 0, 0, 0.2) !important;
+}

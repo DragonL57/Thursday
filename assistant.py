@@ -389,6 +389,10 @@ class Assistant:
     def add_msg_assistant(self, msg: str):
         self.messages.append({"role": "assistant", "content": msg})
 
+    def get_current_tool_calls(self):
+        """Get the current tool calls - helper method for streaming."""
+        return self.current_tool_calls
+    
     def add_toolcall_output(self, tool_id, name, content):
         self.messages.append(
             {
@@ -403,6 +407,8 @@ class Assistant:
             if tool_call.get("id") == tool_id:
                 tool_call["status"] = "completed" if "Error" not in str(content) else "error"
                 tool_call["result"] = str(content)
+                # Print for debugging
+                print(f"Tool call result updated: {name} => {tool_call['status']}")
                 break
 
     @cmd(["save"], "Saves the current chat session to pickle file.")

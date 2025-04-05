@@ -150,6 +150,14 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
             payload.imageData = imageData;
         }
         
+        console.log('💬 Sending message to server');
+        
+        // Track tool events for debugging
+        window.TOOL_TRACKER = {
+            toolCalls: [],
+            toolUpdates: []
+        };
+        
         const response = await fetch('/chat/stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -202,13 +210,25 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
                                 
                             case 'tool_call':
                                 if (typeof onToolCall === 'function') {
+                                    console.log('🔨 Tool call received:', parsedData.data);
+                                    window.TOOL_TRACKER.toolCalls.push(parsedData.data);
+                                    
+                                    // Call the handler immediately
                                     onToolCall(parsedData.data);
+                                    // Call again after a small delay to ensure DOM is ready
+                                    setTimeout(() => onToolCall(parsedData.data), 100);
                                 }
                                 break;
                                 
                             case 'tool_update':
                                 if (typeof onToolUpdate === 'function') {
+                                    console.log('🔧 Tool update received:', parsedData.data);
+                                    window.TOOL_TRACKER.toolUpdates.push(parsedData.data);
+                                    
+                                    // Call the handler immediately
                                     onToolUpdate(parsedData.data);
+                                    // Call again after a small delay to ensure DOM is ready
+                                    setTimeout(() => onToolUpdate(parsedData.data), 100);
                                 }
                                 break;
                                 

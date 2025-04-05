@@ -343,59 +343,190 @@ export class MessagingComponent {
         scrollToBottom(this.messagesContainer);
     }
 
-    // Add a tool call as a separate message (compact version)
+    // Add a tool call as a separate message - ULTRA SIMPLIFIED VERSION
     addToolCallMessage(toolCall) {
+        // Display critical logs
+        console.log('%c💥 Creating tool call UI (CRITICAL):', 'background:red; color:white; font-size:16px; padding:5px', toolCall);
+        
+        // Create a direct global reference for debugging
+        window.lastToolCallAttempt = toolCall;
+        window.lastToolCallTimestamp = new Date().toISOString();
+        
+        // Create a super basic container that's impossible to miss
         const messageGroup = document.createElement('div');
-        messageGroup.className = 'message-group tool-message compact';
+        messageGroup.className = 'message-group tool-message';
+        messageGroup.id = `tool-message-${toolCall.id}`;
         
-        // Parse the arguments
-        let args;
+        // Use vividly bright styling that can't be missed
+        messageGroup.style.margin = '20px 0';
+        messageGroup.style.padding = '15px';
+        messageGroup.style.border = '5px solid #ff0000';
+        messageGroup.style.borderRadius = '10px';
+        messageGroup.style.backgroundColor = '#fff9c4';
+        messageGroup.style.boxShadow = '0 0 30px rgba(255,0,0,0.5)';
+        messageGroup.style.position = 'relative';
+        messageGroup.style.zIndex = '1000';
+        
+        // Add a flashing animation to make it more visible
+        messageGroup.style.animation = 'flash-tool-call 1s alternate infinite';
+        
+        // Add CSS for the animation if it doesn't exist
+        if (!document.getElementById('tool-call-animation-style')) {
+            const styleElement = document.createElement('style');
+            styleElement.id = 'tool-call-animation-style';
+            styleElement.textContent = `
+                @keyframes flash-tool-call {
+                    from { box-shadow: 0 0 30px rgba(255,0,0,0.5); }
+                    to { box-shadow: 0 0 30px rgba(255,0,0,0.9); }
+                }
+            `;
+            document.head.appendChild(styleElement);
+        }
+        
+        // Parse arguments for display
+        let args = '{}';
         try {
-            args = JSON.parse(toolCall.args);
-            // Convert args to a more readable string format
-            args = Object.entries(args)
-                .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
-                .join(', ');
+            if (typeof toolCall.args === 'string') {
+                args = JSON.parse(toolCall.args);
+                args = JSON.stringify(args, null, 2);
+            } else {
+                args = JSON.stringify(toolCall.args || {}, null, 2);
+            }
         } catch (e) {
-            args = toolCall.args;
+            args = String(toolCall.args || '{}');
         }
         
-        // Check if result exists and determine if it's a single line
-        let resultClass = !toolCall.result ? 'hidden' : '';
-        if (toolCall.result && !toolCall.result.includes('\n')) {
-            resultClass += ' single-line';
-        }
-        
+        // Create ultra-simple HTML structure
         messageGroup.innerHTML = `
-            <div class="message-content">
-                <div class="message-content-container">
-                    <div class="tool-status-indicator ${toolCall.status}" title="${toolCall.status}"></div>
-                    <div class="message-bubble tool-message-bubble" data-tool-id="tool-call-${toolCall.id}">
-                        <div class="tool-execution">
-                            <div class="tool-command">
-                                <code>${toolCall.name}(${args})</code>
-                            </div>
-                            <div class="tool-result ${resultClass}">
-                                <pre><code>${toolCall.result || ''}</code></pre>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div style="text-align:center; font-size:18px; font-weight:bold; color:#ff0000; margin-bottom:10px; text-transform:uppercase;">
+                🛠️ TOOL EXECUTION
+            </div>
+            <div style="font-size:16px; font-weight:bold; background:#ff0000; color:white; padding:8px; border-radius:5px; margin-bottom:10px;">
+                ${toolCall.name}
+            </div>
+            <div style="background:#ffffff; padding:10px; border-radius:5px; border:2px solid #ccc; margin-bottom:10px;">
+                <div style="font-weight:bold; margin-bottom:5px;">Arguments:</div>
+                <pre style="margin:0; white-space:pre-wrap; overflow-x:auto; background:#f5f5f5; padding:5px; border-radius:3px;">${args}</pre>
+            </div>
+            <div id="tool-result-${toolCall.id}" style="display:${toolCall.result ? 'block' : 'none'}; background:#e8f5e9; padding:10px; border-radius:5px; border:2px solid #81c784;">
+                <div style="font-weight:bold; margin-bottom:5px;">Result:</div>
+                <pre style="margin:0; white-space:pre-wrap; overflow-x:auto; background:#f1f8e9; padding:5px; border-radius:3px;">${toolCall.result || 'Executing...'}</pre>
             </div>
         `;
         
-        this.messagesContainer.appendChild(messageGroup);
+        // Add a debug info attribute for easier testing
+        messageGroup.setAttribute('data-tool-id', toolCall.id);
+        messageGroup.setAttribute('data-tool-name', toolCall.name);
+        messageGroup.setAttribute('data-created', new Date().toISOString());
         
-        // Apply syntax highlighting
-        messageGroup.querySelectorAll('pre code, .tool-command code').forEach((block) => {
-            hljs.highlightElement(block);
-        });
-        
-        scrollToBottom(this.messagesContainer);
+        // Insert the message container directly as the first child of messages container
+        try {
+            if (this.messagesContainer) {
+                if (this.messagesContainer.firstChild) {
+                    this.messagesContainer.insertBefore(messageGroup, this.messagesContainer.firstChild);
+                } else {
+                    this.messagesContainer.appendChild(messageGroup);
+                }
+                
+                // Force scroll to show the message
+                messageGroup.scrollIntoView({behavior: 'smooth'});
+                
+                console.log(`💥 Tool UI successfully created: ${toolCall.name} (ID: ${toolCall.id})`);
+            } else {
+                console.error('💥 No message container found!');
+                // Fallback to body insertion
+                document.body.appendChild(messageGroup);
+            }
+        } catch (error) {
+            console.error('💥 Error inserting tool message:', error);
+            // Last resort fallback - append to body
+            document.body.appendChild(messageGroup);
+        }
         
         return messageGroup;
     }
-    
+
+    // Update tool call status and result - ULTRA SIMPLIFIED VERSION
+    updateToolCall(toolCall) {
+        console.log('%c💥 Updating tool call UI:', 'background:blue; color:white; font-size:16px; padding:5px', toolCall);
+        
+        // Create a direct global reference for debugging
+        window.lastToolUpdateAttempt = toolCall;
+        window.lastToolUpdateTimestamp = new Date().toISOString();
+        
+        // Try to find the tool message element
+        const toolMessage = document.getElementById(`tool-message-${toolCall.id}`);
+        
+        if (!toolMessage) {
+            console.warn(`No tool message found for ID: ${toolCall.id} - creating new one`);
+            
+            // Try another way to find the element in case ID is different
+            const potentialMatches = document.querySelectorAll('.tool-message');
+            let matchFound = false;
+            
+            potentialMatches.forEach(element => {
+                const name = element.getAttribute('data-tool-name');
+                if (name === toolCall.name) {
+                    console.log(`Found tool by name match: ${name}`);
+                    updateToolElement(element, toolCall);
+                    matchFound = true;
+                }
+            });
+            
+            if (!matchFound) {
+                return this.addToolCallMessage(toolCall);
+            }
+        } else {
+            updateToolElement(toolMessage, toolCall);
+        }
+        
+        // Helper function to update a tool element
+        function updateToolElement(element, toolCall) {
+            // Update styling to indicate completion
+            element.style.border = '5px solid #00c853';
+            element.style.boxShadow = '0 0 30px rgba(0,200,83,0.5)';
+            element.style.backgroundColor = '#e8f5e9';
+            
+            // Stop the animation
+            element.style.animation = 'none';
+            
+            // Update the result section if available
+            if (toolCall.result) {
+                const resultContainer = document.getElementById(`tool-result-${toolCall.id}`);
+                if (resultContainer) {
+                    resultContainer.style.display = 'block';
+                    const resultContent = resultContainer.querySelector('pre');
+                    if (resultContent) {
+                        resultContent.textContent = toolCall.result;
+                    }
+                } else {
+                    // Create result container if it doesn't exist
+                    const newResultContainer = document.createElement('div');
+                    newResultContainer.id = `tool-result-${toolCall.id}`;
+                    newResultContainer.style.display = 'block';
+                    newResultContainer.style.background = '#e8f5e9';
+                    newResultContainer.style.padding = '10px';
+                    newResultContainer.style.borderRadius = '5px';
+                    newResultContainer.style.border = '2px solid #81c784';
+                    newResultContainer.style.marginTop = '10px';
+                    
+                    newResultContainer.innerHTML = `
+                        <div style="font-weight:bold; margin-bottom:5px;">Result:</div>
+                        <pre style="margin:0; white-space:pre-wrap; overflow-x:auto; background:#f1f8e9; padding:5px; border-radius:3px;">${toolCall.result}</pre>
+                    `;
+                    
+                    element.appendChild(newResultContainer);
+                }
+                
+                // Update debug info
+                element.setAttribute('data-updated', new Date().toISOString());
+                element.setAttribute('data-status', 'completed');
+            }
+        }
+        
+        console.log(`💥 Tool UI updated: ${toolCall.name}`);
+    }
+
     // Create a tool call element (for compatibility with existing code)
     createToolCallElement(toolCall) {
         const toolCallElement = document.createElement('div');
@@ -430,58 +561,6 @@ export class MessagingComponent {
         `;
         
         return toolCallElement;
-    }
-    
-    // Update tool call status and result
-    updateToolCall(toolCall) {
-        // Update the tool call message if it exists
-        const toolCallId = `tool-call-${toolCall.id}`;
-        const toolMessage = document.querySelector(`.tool-message .message-bubble[data-tool-id="${toolCallId}"]`);
-        
-        if (toolMessage) {
-            const statusIndicator = toolMessage.closest('.message-content').querySelector('.tool-status-indicator');
-            if (statusIndicator) {
-                statusIndicator.className = `tool-status-indicator ${toolCall.status}`;
-                statusIndicator.title = toolCall.status;
-            }
-            
-            const resultElement = toolMessage.querySelector('.tool-result');
-            if (resultElement && toolCall.result) {
-                resultElement.classList.remove('hidden');
-                
-                // Add single-line class if result is a single line
-                if (!toolCall.result.includes('\n')) {
-                    resultElement.classList.add('single-line');
-                }
-                
-                resultElement.querySelector('pre code').textContent = toolCall.result;
-                
-                // Highlight the result code
-                hljs.highlightElement(resultElement.querySelector('pre code'));
-            }
-        } else {
-            // If no dedicated tool message exists (old format), update the embedded tool call
-            const toolCallElement = document.getElementById(toolCallId);
-            if (toolCallElement) {
-                toolCallElement.className = `tool-call ${toolCall.status}`;
-                toolCallElement.querySelector('.tool-call-status').textContent = toolCall.status;
-                
-                const resultElement = toolCallElement.querySelector('.tool-call-result');
-                if (toolCall.result) {
-                    resultElement.classList.remove('hidden');
-                    
-                    // Add single-line class if result is a single line
-                    if (!toolCall.result.includes('\n')) {
-                        resultElement.classList.add('single-line');
-                    }
-                    
-                    resultElement.querySelector('pre code').textContent = toolCall.result;
-                    
-                    // Highlight the result code
-                    hljs.highlightElement(resultElement.querySelector('pre code'));
-                }
-            }
-        }
     }
     
     // Send message to API and handle response
@@ -555,12 +634,20 @@ export class MessagingComponent {
                 
                 // Called when a new tool call is detected
                 onToolCall: (toolCall) => {
-                    this.addToolCallMessage(toolCall);
+                    console.log('Tool call received in messaging component:', toolCall);
+                    // Force visibility by adding a short delay for the DOM to be ready
+                    setTimeout(() => {
+                        this.addToolCallMessage(toolCall);
+                    }, 10);
                 },
                 
                 // Called when a tool call is updated with results
                 onToolUpdate: (toolCall) => {
-                    this.updateToolCall(toolCall);
+                    console.log('Tool update received in messaging component:', toolCall);
+                    // Force visibility by adding a short delay for the DOM to be ready
+                    setTimeout(() => {
+                        this.updateToolCall(toolCall);
+                    }, 10);
                 },
                 
                 // Called when the final response is ready
