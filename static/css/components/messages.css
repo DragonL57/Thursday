@@ -180,7 +180,7 @@
 .message-bubble pre {
     background-color: var(--code-bg);
     border-radius: var(--border-radius);
-    padding: 1rem;
+    padding: 0.5rem; /* Reduced from 1rem to 0.5rem */
     overflow-x: auto;
     margin: 1rem 0;
     position: relative;
@@ -305,16 +305,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 1rem;
+    padding: 0.25rem 0.5rem; /* Reduced from 0.5rem 1rem */
     background-color: rgba(0,0,0,0.03);
     border-bottom: 1px solid var(--border-color);
     font-size: 0.8rem;
     color: var(--text-tertiary);
     border-radius: var(--border-radius) var(--border-radius) 0 0;
-    margin-top: -1rem;
-    margin-left: -1rem;
-    margin-right: -1rem;
-    margin-bottom: 1rem;
+    margin: 0; /* Remove all margins */
+    width: 100%; /* Ensure it's the same width as the code block */
 }
 
 .dark-mode .code-header {
@@ -446,7 +444,7 @@
 .message-bubble pre {
     background-color: var(--code-bg);
     border-radius: var(--border-radius);
-    padding: 1rem;
+    padding: 0.5rem; /* Reduced from 1rem to 0.5rem */
     overflow-x: auto;
     margin: 1rem 0;
     position: relative;
@@ -475,7 +473,7 @@
     margin: 1.5rem 0;
     color: var(--text-secondary);
     background-color: rgba(16, 163, 127, 0.05);
-    border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    border-radius: 0 var(--border-radius) var (--border-radius) 0;
 }
 
 .user-message .message-bubble blockquote,
@@ -561,4 +559,20 @@
         transform: scale(1.2);
         opacity: 1;
     }
+}
+
+/* Add this new code block container */
+.code-block {
+    margin: 1rem 0;
+    border-radius: var(--border-radius);
+    overflow: hidden; /* Ensures the rounded corners work properly */
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.code-block pre {
+    margin: 0; /* Remove margin from pre when inside code-block */
+    border: none; /* Remove border as it's handled by code-block */
+    border-radius: 0; /* Remove border radius as it's handled by code-block */
+    box-shadow: none; /* Remove shadow as it's handled by code-block */
 }
