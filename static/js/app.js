@@ -106,43 +106,35 @@ document.addEventListener('DOMContentLoaded', () => {
                         hljs.highlightElement(block);
                     });
                     
-                    // Wait a bit to ensure content is fully rendered
+                    // Perform math rendering in a non-blocking way
                     setTimeout(() => {
                         try {
                             if (typeof renderMathInElement === 'function') {
-                                // Add more restrictive configuration to avoid false positives
                                 renderMathInElement(messageElement, {
                                     delimiters: [
                                         {left: '$$', right: '$$', display: true},
                                         {left: '$', right: '$', display: false},
-                                        // Be more specific about square bracket math to avoid capturing citations
-                                        {left: '[\\n\\s]*', right: '[\\n\\s]*', display: true}
+                                        {left: '\\[', right: '\\]', display: true},
+                                        {left: '\\(', right: '\\)', display: false},
+                                        {left: '[', right: ']', display: true}
                                     ],
                                     ignoredTags: [
-                                        'a', 'script', 'noscript', 'style', 'textarea', 'pre',
-                                        'code', 'annotation', 'annotation-xml', 'cite', 'span'
+                                        'script', 'noscript', 'style', 'textarea', 'pre',
+                                        'code', 'annotation', 'annotation-xml'
                                     ],
                                     throwOnError: false,
                                     strict: false,
-                                    // Don't process text that looks like a citation or URL
-                                    trust: (context) => {
-                                        const text = context.text;
-                                        // Skip processing if it looks like a citation or URL
-                                        if (/(Source:|http|www|\.com|\.org|\.net)/.test(text)) {
-                                            return false;
-                                        }
-                                        // Also skip if it contains newlines with single letters (formatted citations)
-                                        if (/\n[A-Za-z]\n[A-Za-z]\n/.test(text)) {
-                                            return false;
-                                        }
-                                        return true;
+                                    trust: true,
+                                    macros: {
+                                        "\\phi": "\\varphi",
+                                        "\\quad": "\\;\\;"
                                     }
                                 });
                             }
                         } catch (e) {
                             console.error('Error rendering LaTeX:', e);
                         }
-                    }, 100);
+                    }, 0); // Use 0ms timeout to put in next event loop but not delay too much
                 }
                 return messageElement;
             };

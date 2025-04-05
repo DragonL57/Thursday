@@ -152,15 +152,34 @@ export function setupMarkdown() {
  */
 function initKaTeXAutoRender() {
     if (typeof renderMathInElement !== 'undefined') {
-        renderMathInElement(document.body, {
-            delimiters: [
-                {left: '$$', right: '$$', display: true},
-                {left: '$', right: '$', display: false},
-                {left: '[', right: ']', display: true}
-            ],
-            throwOnError: false,
-            strict: false // Be more forgiving in parsing
-        });
+        try {
+            renderMathInElement(document.body, {
+                delimiters: [
+                    {left: '$$', right: '$$', display: true},
+                    {left: '$', right: '$', display: false},
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '\\(', right: '\\)', display: false},
+                    {left: '[', right: ']', display: true}
+                ],
+                throwOnError: false,
+                strict: false,
+                trust: true,
+                output: 'html',  // Use HTML output for better alignment environment support
+                macros: {
+                    "\\phi": "\\varphi",
+                    "\\quad": "\\;\\;",
+                    "\\cases": "\\begin{cases}#1\\end{cases}",
+                    "\\n": "\\\\",
+                    "\\align": "\\begin{align}#1\\end{align}",
+                    "\\align*": "\\begin{align*}#1\\end{align*}",
+                },
+                errorCallback: function(msg, err) {
+                    console.warn('KaTeX error:', msg);
+                }
+            });
+        } catch (e) {
+            console.error('Error initializing KaTeX auto-render:', e);
+        }
     } else {
         console.warn('KaTeX auto-render not available yet');
         setTimeout(initKaTeXAutoRender, 500); // Try again after 500ms

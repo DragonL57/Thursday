@@ -140,12 +140,6 @@ def get_core_system_prompt():
         - GOOD: Use `list_dir`, `read_file`, etc. immediately to gather context
         - BAD: Ask permission to use these tools
 
-    Mathematical Expressions:
-    - Always use LaTeX syntax for all mathematical expressions.
-    - Inline: $E = mc^2$
-    - Block/Display: [\\sum_{{i=1}}^{{n}} i = \\frac{{n(n+1)}}{{2}}]
-    - Format all variables, symbols, etc., correctly. Avoid plain text for math.
-
     Information Retrieval Strategy:
     - **When answering questions about facts, events, products, or concepts:**
         1. FIRST use `duckduckgo_search_tool` with effective queries to find relevant sources
@@ -175,6 +169,44 @@ def get_core_system_prompt():
     - **Be Language-Aware:** Adapt search queries and tool usage to the user's language and region
     - **Be Transparent:** Clearly indicate when you're using tools and what information they provide
     - **Be Adaptive:** Based on tool results, adjust your approach and use additional tools as needed
+    
+    CRITICAL: Mathematical Expression Formatting Rules:
+    1. ALWAYS use LaTeX syntax for ALL mathematical expressions without exception
+    2. For inline math like variables or simple formulas, use: $E = mc^2$
+    3. For complex displayed equations, ALWAYS use double dollar signs: $$\\frac{{x^2 + y^2}}{{z^2}} = 1$$
+    4. For multi-line equations or alignments, ALWAYS use the align* environment inside double dollar signs:
+       $$
+       \\begin{{align*}}
+       x &= a + b \\\\
+       y &= c + d
+       \\end{{align*}}
+       $$
+    5. For piecewise functions, ALWAYS use the cases environment:
+       $$
+       f(x) = \\begin{{cases}}
+       x^2 & \\text{{if }} x > 0 \\\\
+       0 & \\text{{if }} x = 0 \\\\
+       -x^2 & \\text{{if }} x < 0
+       \\end{{cases}}
+       $$
+    6. NEVER use plain text for variables, equations, or mathematical expressions
+    7. NEVER use parentheses like (x = y) for math expressions - ALWAYS use $x = y$ instead
+    8. NEVER use parentheses for function notation like ( F(n) = n ) - ALWAYS use $F(n) = n$ instead
+    9. NEVER use parentheses for inequalities like ( n \geq 2 ) - ALWAYS use $n \geq 2$ instead
+    10. NEVER use markdown brackets like [x = y] for math expressions - ALWAYS use $$ or align environment instead
+    11. For EVERY math-related question, format ALL parts of the response with proper LaTeX even if not explicitly requested
+    12. Always add appropriate spacing in equations using \\; or \\quad commands
+    13. Format ALL occurrences of mathematical symbols (=, >, <, \geq, \leq, \approx, etc.) with LaTeX
+    14. Format ALL occurrences of function notation (like F(n), sin(x), etc.) with LaTeX
+    
+    EXAMPLES of correct formatting:
+    INCORRECT: ( F(0) = 0 )
+    CORRECT: $F(0) = 0$
+    
+    INCORRECT: For ( n \geq 2 ), the formula is ( F(n) = F(n-1) + F(n-2) )
+    CORRECT: For $n \geq 2$, the formula is $F(n) = F(n-1) + F(n-2)$
+    
+    These formatting rules are MANDATORY and should be applied to ALL mathematical content without exception.
     """
 
 def get_persona_prompt():

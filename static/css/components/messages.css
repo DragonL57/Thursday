@@ -576,3 +576,95 @@
     border-radius: 0; /* Remove border radius as it's handled by code-block */
     box-shadow: none; /* Remove shadow as it's handled by code-block */
 }
+
+/* Add these styles for proper math rendering */
+
+/* Styles for LaTeX math formulas */
+.katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.5rem 0;
+    margin: 1rem 0;
+}
+
+/* Make inline math formulas align better with text */
+.katex {
+    font-size: 1.1em;
+}
+
+/* Ensure cases environment renders properly */
+.katex-display .katex .base {
+    max-width: 100%;
+}
+
+/* Ensure piecewise functions have proper spacing */
+.katex-html .amsmath .cases {
+    display: inline-table;
+    min-width: 150px;
+}
+
+/* Fix any code block related issues */
+.code-block {
+    margin: 1rem 0;
+    border-radius: var(--border-radius);
+    overflow: hidden; /* Ensures the rounded corners work properly */
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.code-block pre {
+    margin: 0; /* Remove margin from pre when inside code-block */
+    border: none; /* Remove border as it's handled by code-block */
+    border-radius: 0; /* Remove border radius as it's handled by code-block */
+    box-shadow: none; /* Remove shadow as it's handled by code-block */
+}
+
+/* Add these enhanced styles for LaTeX align environments */
+
+/* Ensure align environments render correctly */
+.katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.5rem 0;
+    margin: 1rem 0;
+    text-align: center !important;
+}
+
+/* Make inline math formulas align better with text */
+.katex {
+    font-size: 1.1em;
+}
+
+/* Ensure cases and align environments render properly */
+.katex-display .katex .base {
+    max-width: 100%;
+}
+
+/* Fix alignment in align environments */
+.katex .katex-html {
+    text-align: left;
+}
+
+/* Allow align blocks to have more width */
+.katex-display > .katex {
+    max-width: 100%;
+    display: inline-block;
+}
+
+/* Improve spacing in aligned equations */
+.katex-html .align {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* Fix spacing in align environments where amp is used */
+.katex .amsalign {
+    text-align: left;
+    display: inline-block;
+}
+
+/* Improve display of text within math */
+.katex .mord.text {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
