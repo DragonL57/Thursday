@@ -289,3 +289,20 @@ export async function updateSettings(settings) {
     
     return await response.json();
 }
+
+/**
+ * Fetch current settings from the server
+ * @returns {Promise<Object>} The current settings
+ */
+export async function getSettings() {
+    try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching settings:', error);
+        throw error;
+    }
+}

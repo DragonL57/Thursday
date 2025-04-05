@@ -13,6 +13,130 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@9.0.0/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <!-- Add this after loading KaTeX but before loading your app.js -->
+    <script>
+// Helper function to convert common math notation to LaTeX with significantly improved pattern matching
+document.addEventListener('DOMContentLoaded', function() {
+    // Track processed elements to avoid infinite loops
+    const processedElements = new WeakSet();
+    let isProcessing = false;
+    
+    // Process any content with math notation
+    function processMathContent(element) {
+        if (processedElements.has(element) || isProcessing) return;
+        
+        // Mark as processed to prevent infinite loops
+        processedElements.add(element);
+        isProcessing = true;
+        
+        try {
+            const contentToProcess = element.innerHTML;
+            
+            // Only perform replacement if we find potential math patterns
+            if (/([\(\[]).*?[=+\-*/\\].*?[\)\]]|\\begin\{align\*?\}/.test(contentToProcess)) {
+                // Create a temporary div to work with the content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = contentToProcess;
+                
+                // Process text nodes for parenthetical math expressions
+                const walker = document.createTreeWalker(
+                    tempDiv, 
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+                
+                const nodesToReplace = [];
+                let currentNode;
+                
+                // Find all nodes that need replacement
+                while (currentNode = walker.nextNode()) {
+                    const text = currentNode.nodeValue;
+                    
+                    // Convert (F(n) = F(n-1) + F(n-2)) style expressions
+                    if(/\([^()]*?[A-Za-z]\([^()]*?\)[^()]*?=.*?\)/.test(text)) {
+                        nodesToReplace.push({
+                            node: currentNode,
+                            newText: text.replace(/\(([^()]*?[A-Za-z]\([^()]*?\)[^()]*?=.*?)\)/g, '\\($1\\)')
+                        });
+                    }
+                    // Convert simpler (x = y) expressions
+                    else if(/\([^()]*?=.*?\)/.test(text)) {
+                        nodesToReplace.push({
+                            node: currentNode,
+                            newText: text.replace(/\(([^()]*?=.*?)\)/g, '\\($1\\)')
+                        });
+                    }
+                    // Convert expressions with mathematical symbols/keywords
+                    else if(/\(.*?(\\[a-zA-Z]+|\\geq|\\leq|\\approx).*?\)/.test(text)) {
+                        nodesToReplace.push({
+                            node: currentNode,
+                            newText: text.replace(/\((.*?(\\[a-zA-Z]+|\\geq|\\leq|\\approx).*?)\)/g, '\\($1\\)')
+                        });
+                    }
+                }
+                
+                // Apply replacements
+                for (const replacement of nodesToReplace) {
+                    replacement.node.nodeValue = replacement.newText;
+                }
+                
+                // Handle cases environment with better preservation
+                if (/\\begin\{cases\}/.test(tempDiv.innerHTML)) {
+                    tempDiv.innerHTML = tempDiv.innerHTML.replace(
+                        /\[([\s\S]*?)\\begin\{cases\}([\s\S]*?)\\end\{cases\}([\s\S]*?)\]/g, 
+                        '\\[$1\\begin{cases}$2\\end{cases}$3\\]'
+                    );
+                }
+                
+                // Handle align environments better
+                if (/\\begin\{align\*?\}/.test(tempDiv.innerHTML)) {
+                    tempDiv.innerHTML = tempDiv.innerHTML.replace(
+                        /\[([\s\S]*?)\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}([\s\S]*?)\]/g, 
+                        '$$[$1\\begin{align*}$2\\end{align*}$3]$$'
+                    );
+                }
+                
+                element.innerHTML = tempDiv.innerHTML;
+            }
+        } catch (e) {
+            console.error('Error processing math content:', e);
+        } finally {
+            isProcessing = false;
+        }
+    }
+    
+    // Process messages once they're added
+    const observer = new MutationObserver(mutations => {
+        requestAnimationFrame(() => {
+            mutations.forEach(mutation => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            if (node.classList && node.classList.contains('message-bubble')) {
+                                processMathContent(node);
+                            } else {
+                                const bubbles = node.querySelectorAll('.message-bubble');
+                                bubbles.forEach(bubble => processMathContent(bubble));
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    });
+    
+    // Observe messages container
+    const messages = document.getElementById('messages');
+    if (messages) {
+        observer.observe(messages, { 
+            childList: true, 
+            subtree: true,
+            characterData: false
+        });
+    }
+});
+</script>
     <script type="module" src="{{ url_for('static', filename='js/app.js') }}" defer></script>
 </head>
 <body>
@@ -29,38 +153,10 @@
                 <button id="toggleTheme" class="icon-button" title="Toggle dark mode">
                     <span class="material-icons-round">dark_mode</span>
                 </button>
-                <button id="toggleSidebar" class="icon-button mobile-only" title="Toggle menu">
-                    <span class="material-icons-round">menu</span>
-                </button>
             </div>
         </header>
 
         <div class="app-body">
-            <aside class="sidebar">
-                <div class="sidebar-header">
-                    <h3>Conversations</h3>
-                    <button id="newChat" class="icon-button">
-                        <span class="material-icons-round">add</span>
-                    </button>
-                </div>
-                <div class="conversation-list" id="conversationList">
-                    <!-- Conversations will be populated here -->
-                    <div class="conversation active">
-                        <span class="material-icons-round">chat</span>
-                        <span class="conversation-title">New conversation</span>
-                    </div>
-                </div>
-                <div class="sidebar-footer">
-                    <div class="user-info">
-                        <span class="material-icons-round user-avatar">account_circle</span>
-                        <span class="user-name">User</span>
-                    </div>
-                    <button id="settingsButton" class="icon-button" title="Settings">
-                        <span class="material-icons-round">settings</span>
-                    </button>
-                </div>
-            </aside>
-
             <main class="chat-container">
                 <div class="messages" id="messages">
                     <div class="message-group assistant-message welcome-message" id="welcomeMessage">
@@ -76,7 +172,7 @@
                 </div>
                 
                 <div class="input-container">
-                    <form id="messageForm">
+                    <form id="messageForm" onsubmit="console.log('Form submitted via onsubmit attribute'); return false;">
                         <div class="input-wrapper">
                             <textarea 
                                 id="userInput" 
@@ -89,7 +185,7 @@
                                 <button type="button" id="attachButton" class="icon-button" title="Attach a file">
                                     <span class="material-icons-round">attach_file</span>
                                 </button>
-                                <button type="submit" id="sendButton" class="send-button" disabled>
+                                <button type="submit" id="sendButton" class="send-button">
                                     <span class="material-icons-round">send</span>
                                 </button>
                             </div>
@@ -130,8 +226,12 @@
                 </div>
                 <div class="settings-option">
                     <label for="temperatureSlider">Temperature</label>
-                    <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="0.25">
-                    <span id="temperatureValue">0.25</span>
+                    <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="1">
+                    <span id="temperatureValue">1</span>
+                </div>
+                <div class="settings-option">
+                    <label for="maxTokensInput">Max Tokens</label>
+                    <input type="number" id="maxTokensInput" min="100" max="32000" step="100" value="8192">
                 </div>
                 <div class="settings-option">
                     <label>

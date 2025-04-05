@@ -493,117 +493,128 @@ class Assistant:
                 }
         return arg_value
 
-    def __process_response(self, response_json, print_response=False, validation_retries=2):
+    def __process_response(self, response_json, print_response=True, validation_retries=2):
+        """
+        Process a response from the API, handling any tool calls and follow-up responses.
+        
+        This method recursively processes tool calls until no more are requested,
+        allowing for multi-turn tool calls in a single conversation turn.
+        
+        Args:
+            response_json: The JSON response from the API
+            print_response: Whether to print the final response to console
+            validation_retries: Number of retries left for tool validation issues
+            
+        Returns:
+            Dict containing the final text response and tool call information
+        """
         if not response_json or "choices" not in response_json or not response_json["choices"]:
             print(f"{Fore.RED}Error: Invalid response format from API: {response_json}{Style.RESET_ALL}")
             return {"text": "Error: Received invalid response from API.", "tool_calls": []}
 
+        # Extract the message from the response
         response_message = response_json["choices"][0]["message"]
-
-        tool_calls_raw = response_message.get("tool_calls")
-
-        tool_calls = []
-        if tool_calls_raw:
-            tool_calls = tool_calls_raw
-        if tool_calls:
-            # Track tool calls for this response
-            for tool_call in tool_calls:
-                self.current_tool_calls.append({
-                    "id": tool_call["id"],
-                    "name": tool_call["function"]["name"],
-                    "args": tool_call["function"]["arguments"],
-                    "status": "pending",
-                    "result": None
-                })
-            
-            if response_message not in self.messages:
-                self.messages.append(response_message)
-
-            needs_correction_reprompt = False
-            successful_tool_call_happened = False
-            tool_errors = []
-
-            for tool_call in tool_calls:
-                function_name = tool_call['function']['name']
-                tool_id = tool_call['id']
-                function_to_call = self.available_functions.get(function_name)
-
-                if function_to_call is None:
-                    err_msg = f"Function not found with name: {function_name}"
-                    print(f"{Fore.RED}Error: {err_msg}{Style.RESET_ALL}")
-                    self.add_toolcall_output(tool_id, function_name, err_msg)
-                    tool_errors.append((tool_id, function_name, err_msg))
-                    needs_correction_reprompt = True
-                    continue
-                try:
-                    function_args_str = tool_call['function']['arguments']
-                    function_args = json.loads(function_args_str)
-
-                    is_valid, validation_error = validate_tool_call(function_name, function_args)
-                    if not is_valid:
-                        err_msg = f"Tool call validation failed: {validation_error}. Please correct the parameters."
-                        tool_report_print("Validation Error:", f"Tool call '{function_name}'. Reason: {validation_error}", is_error=True)
-                        self.add_toolcall_output(tool_id, function_name, err_msg)
-                        tool_errors.append((tool_id, function_name, err_msg))
-                        needs_correction_reprompt = True
-                        continue
-
-                    sig = inspect.signature(function_to_call)
-                    converted_args = function_args.copy()
-                    for param_name, param in sig.parameters.items():
-                        if param_name in converted_args:
-                            converted_args[param_name] = self.convert_to_pydantic_model(
-                                param.annotation, converted_args[param_name]
-                            )
-
-                    function_response = function_to_call(**converted_args)
-
-                    if response_message.get("content"):
-                        pass
-
-                    self.add_toolcall_output(
-                        tool_id, function_name, function_response
-                    )
-                    successful_tool_call_happened = True
-
-                except json.JSONDecodeError as e:
-                    err_msg = f"Failed to decode tool arguments for {function_name}: {e}. Arguments received: {function_args_str}"
-                    tool_report_print("Argument Error:", err_msg, is_error=True)
-                    self.add_toolcall_output(tool_id, function_name, err_msg)
-                    tool_errors.append((tool_id, function_name, err_msg))
-                    needs_correction_reprompt = True
-                    continue
-                except Exception as e:
-                    err_msg = f"Error executing tool {function_name}: {e}"
-                    print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
-                    self.add_toolcall_output(tool_id, function_name, err_msg)
-                    tool_errors.append((tool_id, function_name, err_msg))
-                    needs_correction_reprompt = True
-                    continue
-
-            if needs_correction_reprompt:
-                if validation_retries > 0:
-                    print(f"{Fore.YELLOW}Attempting to get corrected tool call(s) from LLM (Retries left: {validation_retries})...{Style.RESET_ALL}")
-                    new_response = self.get_completion()
-                    return self.__process_response(new_response, print_response=print_response, validation_retries=validation_retries - 1)
-                else:
-                    print(f"{Fore.RED}Max validation retries exceeded. Failed to get valid tool call(s).{Style.RESET_ALL}")
-                    final_text_content = response_message.get("content") or f"Could not complete the tool operation(s) ({', '.join([name for _, name, _ in tool_errors])}) after multiple retries due to validation or execution errors."
-                    if not response_message.get("content"):
-                        self.add_msg_assistant(final_text_content)
-
-                    return {"text": final_text_content, "tool_calls": self.current_tool_calls}
-
-            elif successful_tool_call_happened:
-                final_response_after_tools = self.get_completion()
-                return self.__process_response(final_response_after_tools, print_response=print_response, validation_retries=2)
-            else:
-                return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
-
-        else:
-            if response_message not in self.messages:
-                self.messages.append(response_message)
+        
+        # Add the message to our conversation history
+        if response_message not in self.messages:
+            self.messages.append(response_message)
+        
+        # Check if there are any tool calls in the response
+        tool_calls = response_message.get("tool_calls", [])
+        
+        # If no tool calls, this is a regular response - print and return it
+        if not tool_calls:
+            if print_response and response_message.get("content"):
+                self.print_ai(response_message.get("content"))
             return {"text": response_message.get("content", ""), "tool_calls": self.current_tool_calls}
+        
+        # Add this response's tool calls to our tracking list
+        for tool_call in tool_calls:
+            self.current_tool_calls.append({
+                "id": tool_call["id"],
+                "name": tool_call["function"]["name"],
+                "args": tool_call["function"]["arguments"],
+                "status": "pending",
+                "result": None
+            })
+        
+        # Print any message content that came with the tool calls
+        if print_response and response_message.get("content"):
+            print(f"{Fore.YELLOW}│ {Fore.GREEN}{self.name}:{Style.RESET_ALL} {Style.DIM}{Fore.WHITE}{response_message['content'].strip()}{Style.RESET_ALL}")
+        
+        # Process each tool call
+        has_errors = False
+        
+        for tool_call in tool_calls:
+            function_name = tool_call["function"]["name"]
+            function_to_call = self.available_functions.get(function_name)
+            tool_id = tool_call["id"]
+            
+            # Check if the function exists
+            if function_to_call is None:
+                err_msg = f"Function not found with name: {function_name}"
+                print(f"{Fore.RED}Error: {err_msg}{Style.RESET_ALL}")
+                self.add_toolcall_output(tool_id, function_name, err_msg)
+                has_errors = True
+                continue
+            
+            try:
+                # Parse and validate arguments
+                function_args_str = tool_call["function"]["arguments"]
+                function_args = json.loads(function_args_str)
+                
+                # Validate tool call if we have a validation function
+                is_valid, validation_error = validate_tool_call(function_name, function_args)
+                if not is_valid:
+                    err_msg = f"Tool call validation failed: {validation_error}. Please correct the parameters."
+                    tool_report_print("Validation Error:", f"Tool call '{function_name}'. Reason: {validation_error}", is_error=True)
+                    self.add_toolcall_output(tool_id, function_name, err_msg)
+                    has_errors = True
+                    continue
+                
+                # Convert arguments to appropriate types using Pydantic models
+                sig = inspect.signature(function_to_call)
+                converted_args = function_args.copy()
+                for param_name, param in sig.parameters.items():
+                    if param_name in converted_args:
+                        converted_args[param_name] = self.convert_to_pydantic_model(
+                            param.annotation, converted_args[param_name]
+                        )
+                
+                # Execute the function with converted arguments
+                function_response = function_to_call(**converted_args)
+                
+                # Report tool execution results
+                tool_report_print(function_name, function_args, function_response)
+                
+                # Add tool call result to conversation
+                self.add_toolcall_output(tool_id, function_name, function_response)
+                
+            except json.JSONDecodeError as e:
+                # Handle JSON parsing errors
+                err_msg = f"Failed to decode tool arguments for {function_name}: {e}. Arguments: {function_args_str}"
+                print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
+                self.add_toolcall_output(tool_id, function_name, err_msg)
+                has_errors = True
+            except Exception as e:
+                # Handle any other errors during execution
+                err_msg = f"Error executing tool {function_name}: {e}"
+                print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
+                self.add_toolcall_output(tool_id, function_name, err_msg)
+                has_errors = True
+        
+        # If we had errors and have retries left, try again with a new API call
+        if has_errors and validation_retries > 0:
+            print(f"{Fore.YELLOW}Some tool calls failed. Trying to get corrected tool calls (Retries left: {validation_retries})...{Style.RESET_ALL}")
+            new_response = self.get_completion()
+            return self.__process_response(new_response, print_response=print_response, validation_retries=validation_retries-1)
+        
+        # Get the next response after processing all tool calls
+        # This allows multi-turn tool calling - the model may make more tool calls in its next response
+        next_response = self.get_completion()
+        
+        # Process the new response recursively
+        return self.__process_response(next_response, print_response=print_response, validation_retries=2)
 
     def get_final_response(self):
         """Get the final text response after all processing is complete."""
