@@ -5,6 +5,10 @@
     --primary-hover: #0e8e6f;
     --secondary-color: #6e6e80;
     
+    /* Link colors */
+    --link-color: #0066cc; /* Blue link color */
+    --link-hover-color: #004499; /* Darker blue on hover */
+    
     /* Light theme */
     --bg-color: #f7f7f8; /* Light gray background */
     --surface-color: #ffffff;
@@ -46,4 +50,8 @@
     --message-assistant-border: #565869;
     --code-bg: #2d2d39;
     --highlight-bg: #2e3c51;
+    
+    /* Dark mode link colors for better contrast */
+    --link-color: #4d9fff; /* Lighter blue for dark mode */
+    --link-hover-color: #66b2ff; /* Even lighter blue on hover for dark mode */
 }

@@ -300,6 +300,17 @@
     border-bottom: 1px solid var(--primary-color);
 }
 
+/* URL links - more polished with blue color and underline */
+.message-bubble a {
+    color: var(--link-color);
+    text-decoration: underline;
+    transition: var(--transition);
+}
+
+.message-bubble a:hover {
+    color: var(--link-hover-color);
+}
+
 /* Code block header - enhanced */
 .code-header {
     display: flex;
