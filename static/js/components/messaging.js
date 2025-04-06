@@ -347,8 +347,14 @@ export class MessagingComponent {
             thinkingIndicator.remove();
         }
         
-        // Update with new content
-        messageBubble.innerHTML = marked.parse(content);
+        // Store the full content in a data attribute for better rebuilding
+        let fullContent = messageBubble.getAttribute('data-content') || '';
+        fullContent += content;
+        messageBubble.setAttribute('data-content', fullContent);
+        
+        // Instead of appending tokens to DOM which creates spacing issues,
+        // rebuild the entire content each time with proper markdown parsing
+        messageBubble.innerHTML = `<div class="markdown-content">${marked.parse(fullContent)}</div>`;
         
         // Apply formatting
         renderMathInElement(messageBubble, {
@@ -383,23 +389,49 @@ export class MessagingComponent {
             args = toolCall.args;
         }
         
+        // Don't display empty parentheses for no arguments
+        const displayArgs = args && args !== "{}" ? `(${args})` : "";
+        
         // Check if result exists and determine if it's a single line
         let resultClass = !toolCall.result ? 'hidden' : '';
         if (toolCall.result && !toolCall.result.includes('\n')) {
             resultClass += ' single-line';
         }
         
+        // Determine appropriate language based on tool name and result content
+        let language = 'plaintext'; // Default to plaintext
+        
+        // Check for specific tool types
+        if (toolCall.name === 'get_current_datetime' || 
+            /^\d{4}-\d{2}-\d{2}/.test(toolCall.result)) {
+            language = 'plaintext';
+        } else if (toolCall.result && toolCall.result.startsWith('{') || toolCall.result && toolCall.result.startsWith('[')) {
+            language = 'json';
+        } else if (toolCall.result && toolCall.result.includes('def ') || toolCall.result && toolCall.result.includes('import ')) {
+            language = 'python';
+        } else if (toolCall.result && toolCall.result.includes('function') || toolCall.result && toolCall.result.includes('const ')) {
+            language = 'javascript';
+        } else if (toolCall.result && toolCall.result.includes('<html') || toolCall.result && toolCall.result.includes('<!DOCTYPE')) {
+            language = 'html';
+        }
+        
+        // Check if this tool call message already exists
+        const existingToolCall = document.querySelector(`.message-bubble[data-tool-id="tool-call-${toolCall.id}"]`);
+        if (existingToolCall) {
+            // If it exists, we'll update it instead of creating a new one
+            return existingToolCall.closest('.message-group');
+        }
+        
         messageGroup.innerHTML = `
             <div class="message-content">
                 <div class="message-content-container">
-                    <div class="tool-status-indicator ${toolCall.status}" title="${toolCall.status}"></div>
                     <div class="message-bubble tool-message-bubble" data-tool-id="tool-call-${toolCall.id}">
                         <div class="tool-execution">
                             <div class="tool-command">
-                                <code>${toolCall.name}(${args})</code>
+                                <code>${toolCall.name}${displayArgs}</code>
                             </div>
                             <div class="tool-result ${resultClass}">
-                                <pre><code>${toolCall.result || ''}</code></pre>
+                                <pre><code class="language-${language}">${toolCall.result || ''}</code></pre>
                             </div>
                         </div>
                     </div>
@@ -407,7 +439,15 @@ export class MessagingComponent {
             </div>
         `;
         
-        this.messagesContainer.appendChild(messageGroup);
+        // Find the assistant message to place tool calls before it
+        const assistantMessage = this.currentAssistantMessage;
+        if (assistantMessage) {
+            // Insert before the assistant message instead of appending to the container
+            this.messagesContainer.insertBefore(messageGroup, assistantMessage);
+        } else {
+            // Fall back to appending if we don't have a reference to the assistant message
+            this.messagesContainer.appendChild(messageGroup);
+        }
         
         // Apply syntax highlighting
         messageGroup.querySelectorAll('pre code, .tool-command code').forEach((block) => {
@@ -462,10 +502,26 @@ export class MessagingComponent {
         const toolMessage = document.querySelector(`.tool-message .message-bubble[data-tool-id="${toolCallId}"]`);
         
         if (toolMessage) {
-            const statusIndicator = toolMessage.closest('.message-content').querySelector('.tool-status-indicator');
-            if (statusIndicator) {
-                statusIndicator.className = `tool-status-indicator ${toolCall.status}`;
-                statusIndicator.title = toolCall.status;
+            // ...existing code...
+            
+            // Update tool command display if it's empty
+            const commandElement = toolMessage.querySelector('.tool-command code');
+            if (commandElement && commandElement.textContent.trim() === toolCall.name) {
+                // If the command doesn't have args, update it
+                let args;
+                try {
+                    args = JSON.parse(toolCall.args);
+                    // Convert args to a more readable string format
+                    args = Object.entries(args)
+                        .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+                        .join(', ');
+                } catch (e) {
+                    args = toolCall.args;
+                }
+                
+                // Don't display empty parentheses for no arguments
+                const displayArgs = args && args !== "{}" ? `(${args})` : "";
+                commandElement.textContent = `${toolCall.name}${displayArgs}`;
             }
             
             const resultElement = toolMessage.querySelector('.tool-result');
@@ -477,10 +533,31 @@ export class MessagingComponent {
                     resultElement.classList.add('single-line');
                 }
                 
-                resultElement.querySelector('pre code').textContent = toolCall.result;
+                const codeElement = resultElement.querySelector('pre code');
+                codeElement.textContent = toolCall.result;
+                
+                // Determine appropriate language based on tool name and result content
+                let language = 'plaintext'; // Default to plaintext
+                
+                // Check for specific tool types
+                if (toolCall.name === 'get_current_datetime' || 
+                    /^\d{4}-\d{2}-\d{2}/.test(toolCall.result)) {
+                    language = 'plaintext';
+                } else if (toolCall.result.startsWith('{') || toolCall.result.startsWith('[')) {
+                    language = 'json';
+                } else if (toolCall.result.includes('def ') || toolCall.result.includes('import ')) {
+                    language = 'python';
+                } else if (toolCall.result.includes('function') || toolCall.result.includes('const ')) {
+                    language = 'javascript';
+                } else if (toolCall.result.includes('<html') || toolCall.result.includes('<!DOCTYPE')) {
+                    language = 'html';
+                }
+                
+                // Update the class with the determined language
+                codeElement.className = `language-${language}`;
                 
                 // Highlight the result code
-                hljs.highlightElement(resultElement.querySelector('pre code'));
+                hljs.highlightElement(codeElement);
             }
         } else {
             // If no dedicated tool message exists (old format), update the embedded tool call
@@ -498,10 +575,30 @@ export class MessagingComponent {
                         resultElement.classList.add('single-line');
                     }
                     
-                    resultElement.querySelector('pre code').textContent = toolCall.result;
+                    const codeElement = resultElement.querySelector('pre code');
+                    codeElement.textContent = toolCall.result;
+                    
+                    // Determine appropriate language (same logic as above)
+                    let language = 'plaintext'; // Default to plaintext
+                    
+                    if (toolCall.name === 'get_current_datetime' || 
+                        /^\d{4}-\d{2}-\d{2}/.test(toolCall.result)) {
+                        language = 'plaintext';
+                    } else if (toolCall.result.startsWith('{') || toolCall.result.startsWith('[')) {
+                        language = 'json';
+                    } else if (toolCall.result.includes('def ') || toolCall.result.includes('import ')) {
+                        language = 'python';
+                    } else if (toolCall.result.includes('function') || toolCall.result.includes('const ')) {
+                        language = 'javascript';
+                    } else if (toolCall.result.includes('<html') || toolCall.result.includes('<!DOCTYPE')) {
+                        language = 'html';
+                    }
+                    
+                    // Update the class with the determined language
+                    codeElement.className = `language-${language}`;
                     
                     // Highlight the result code
-                    hljs.highlightElement(resultElement.querySelector('pre code'));
+                    hljs.highlightElement(codeElement);
                 }
             }
         }
@@ -527,67 +624,119 @@ export class MessagingComponent {
         // Trigger input event to adjust textarea height
         this.userInput.dispatchEvent(new Event('input'));
         
-        // Create empty assistant message with thinking indicator
-        this.addMessage('', false);
-        
         // Set UI to generating state
         this.setGeneratingState(true);
         
+        // Create empty assistant message with thinking indicator
+        let assistantMessage = this.addMessage('', false);
         let currentContent = '';
+        let recursionDepth = 0;
+        let inRecursiveCall = false;
         
+        // Keep track of temporary info messages
+        let tempInfoElement = null;
+
         try {
             // Use streaming API with callbacks for real-time updates
             await streamChatMessage(message, imageData, {
                 // Called when a new token is received
                 onToken: (token) => {
-                    // Ensure proper spacing between tokens
-                    if (currentContent && token) {
-                        // Check if we need to add space between chunks
-                        const lastChar = currentContent.charAt(currentContent.length - 1);
-                        const firstChar = token.charAt(0);
-                        
-                        // Add space in the following cases:
-                        // 1. Between two alphanumeric characters
-                        // 2. After punctuation like comma, semicolon, etc. when followed by alphanumeric
-                        // 3. Before an opening parenthesis or bracket when preceded by alphanumeric
-                        const needsSpace = (
-                            // Case 1: Between alphanumeric characters
-                            (/[a-zA-Z0-9]/.test(lastChar) && 
-                             /[a-zA-Z0-9]/.test(firstChar)) ||
-                            
-                            // Case 2: After punctuation when followed by alphanumeric
-                            (/[,.;:!?]/.test(lastChar) && 
-                             /[a-zA-Z0-9]/.test(firstChar)) ||
-                            
-                            // Case 3: Before opening brackets/parentheses
-                            (/[a-zA-Z0-9]/.test(lastChar) && 
-                             /[\(\[\{]/.test(firstChar))
-                        );
-                        
-                        // Add space if needed and if there isn't already a space
-                        if (needsSpace && 
-                            !currentContent.endsWith(' ') && 
-                            !token.startsWith(' ')) {
-                            currentContent += ' ';
-                        }
+                    // If we're in a recursive call and have no content yet,
+                    // create a new message for the follow-up response
+                    if (inRecursiveCall && !currentContent) {
+                        console.log("Creating new message for recursive response");
+                        // Create a new assistant message for the follow-up response
+                        assistantMessage = this.addMessage('', false);
+                        currentContent = '';
                     }
-                    
+
+                    // Update current content
                     currentContent += token;
-                    this.updateAssistantMessage(currentContent);
+                    
+                    // Update the UI with the token
+                    this.updateAssistantMessage(token);
                 },
                 
                 // Called when a new tool call is detected
                 onToolCall: (toolCall) => {
+                    console.log('Tool call detected:', toolCall);
+                    // The message added by this will now appear before the assistant message
                     this.addToolCallMessage(toolCall);
                 },
                 
                 // Called when a tool call is updated with results
                 onToolUpdate: (toolCall) => {
+                    console.log('Tool call updated:', toolCall);
                     this.updateToolCall(toolCall);
+                },
+                
+                // Called when receiving information messages
+                onInfo: (info, isTemporary) => {
+                    console.log(`Info event: ${info}, temporary: ${isTemporary}`);
+                    
+                    if (isTemporary) {
+                        // Create a temporary info message that can be removed later
+                        if (tempInfoElement) {
+                            tempInfoElement.textContent = info;
+                        } else {
+                            tempInfoElement = document.createElement('div');
+                            tempInfoElement.className = 'tool-processing-info temp-info';
+                            tempInfoElement.textContent = info;
+                            tempInfoElement.style.fontSize = '0.8rem';
+                            tempInfoElement.style.color = 'var(--text-tertiary)';
+                            tempInfoElement.style.fontStyle = 'italic';
+                            tempInfoElement.style.marginBottom = '0.5rem';
+                            
+                            // Add to the assistant message
+                            const messageBubble = assistantMessage.querySelector('.message-bubble');
+                            if (messageBubble) {
+                                messageBubble.appendChild(tempInfoElement);
+                                scrollToBottom(this.messagesContainer);
+                            }
+                        }
+                    } else {
+                        // Add a permanent info message
+                        const infoDiv = document.createElement('div');
+                        infoDiv.className = 'tool-processing-info';
+                        infoDiv.textContent = info;
+                        infoDiv.style.fontSize = '0.8rem';
+                        infoDiv.style.color = 'var(--text-tertiary)';
+                        infoDiv.style.fontStyle = 'italic';
+                        infoDiv.style.marginBottom = '0.5rem';
+                        
+                        // Add to the messages container
+                        this.messagesContainer.appendChild(infoDiv);
+                        scrollToBottom(this.messagesContainer);
+                    }
+                },
+                
+                // Called to clear temporary info messages
+                onClearTempInfo: () => {
+                    console.log('Clearing temporary info messages');
+                    if (tempInfoElement) {
+                        tempInfoElement.remove();
+                        tempInfoElement = null;
+                    }
+                },
+                
+                // Called when receiving information about recursion
+                onRecursionDepth: (depth) => {
+                    console.log(`Recursion depth changed to: ${depth}`);
+                    recursionDepth = depth;
+                    inRecursiveCall = depth > 0;
+                    
+                    if (inRecursiveCall) {
+                        // Create a new assistant message for the follow-up response
+                        console.log("Creating new message bubble for recursive response");
+                        assistantMessage = this.addMessage('', false);
+                        // Reset content for the new recursive response
+                        currentContent = '';
+                    }
                 },
                 
                 // Called when the final response is ready
                 onFinalResponse: (response) => {
+                    console.log('Final response received:', response);
                     if (response) {
                         // If we already have built up content from streaming, we don't need this
                         if (!currentContent) {
@@ -609,10 +758,22 @@ export class MessagingComponent {
                     
                     // Reset UI state
                     this.setGeneratingState(false);
+                    
+                    // Also clear any temporary info messages
+                    if (tempInfoElement) {
+                        tempInfoElement.remove();
+                        tempInfoElement = null;
+                    }
                 },
                 
                 // Called when the stream is complete
                 onDone: () => {
+                    // Clear any remaining temporary info messages
+                    if (tempInfoElement) {
+                        tempInfoElement.remove();
+                        tempInfoElement = null;
+                    }
+                    
                     // Reset UI state
                     this.setGeneratingState(false);
                     this.currentAssistantMessage = null;
@@ -626,6 +787,12 @@ export class MessagingComponent {
                 this.updateAssistantMessage("Sorry, the server is busy processing images right now. Please wait a moment and try again, or use a smaller image.");
             } else {
                 this.updateAssistantMessage('Sorry, there was an error processing your request. Please try again.');
+            }
+            
+            // Clear any temporary info messages
+            if (tempInfoElement) {
+                tempInfoElement.remove();
+                tempInfoElement = null;
             }
             
             // Reset UI state

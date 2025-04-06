@@ -132,16 +132,26 @@ export function abortCurrentRequest() {
  * @param {Function} callbacks.onToolCall - Called when a tool call is received
  * @param {Function} callbacks.onToolUpdate - Called when a tool call is updated
  * @param {Function} callbacks.onFinalResponse - Called when the final response is received
+ * @param {Function} callbacks.onInfo - Called when info messages are received
  * @param {Function} callbacks.onError - Called when an error occurs
  * @param {Function} callbacks.onDone - Called when the stream is complete
+ * @param {Function} callbacks.onRecursionDepth - Called when recursion depth event is received
  * @returns {Promise<void>}
  */
 export async function streamChatMessage(message, imageData = null, callbacks = {}) {
-    const { onToken, onToolCall, onToolUpdate, onFinalResponse, onError, onDone } = callbacks;
+    const { onToken, onToolCall, onToolUpdate, onFinalResponse, onInfo, onError, onDone, onRecursionDepth } = callbacks;
     
     // Create a new AbortController for this request
     currentController = new AbortController();
     const signal = currentController.signal;
+    
+    // Initialize the accumulatedToken variable at the top level
+    let accumulatedToken = '';
+    
+    // Keep track of tool calls we've seen
+    const toolCalls = new Map();
+    // Keep track of processed tool updates to prevent duplicates
+    const processedToolUpdates = new Set();
     
     try {
         // Construct request payload with or without image
@@ -168,17 +178,20 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
         let buffer = '';
         let currentContent = '';
         
+        console.log('Stream connected, waiting for tokens...'); 
+        
         while (true) {
             const { value, done } = await reader.read();
             
             if (done) {
-                if (typeof onDone === 'function') {
-                    onDone();
-                }
+                console.log('Stream completed'); 
                 break;
             }
             
-            buffer += decoder.decode(value, { stream: true });
+            // Decode the received chunk and add to buffer
+            const chunk = decoder.decode(value, { stream: true });
+            console.log('Received SSE chunk:', chunk); 
+            buffer += chunk;
             
             // Process complete events in the buffer
             let eventEnd = buffer.indexOf('\n\n');
@@ -189,49 +202,120 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
                 // Parse SSE data format
                 if (eventData.startsWith('data: ')) {
                     try {
-                        const parsedData = JSON.parse(eventData.substring(6));
+                        const jsonData = eventData.substring(6);
+                        const parsedData = JSON.parse(jsonData);
                         
                         // Handle different event types
                         switch (parsedData.event) {
+                            case 'start':
+                                console.log('Stream started');
+                                break;
+                                
                             case 'token':
                                 if (typeof onToken === 'function') {
-                                    onToken(parsedData.data);
-                                    currentContent += parsedData.data;
+                                    const token = parsedData.data;
+                                    accumulatedToken += token;
+                                    onToken(token);
                                 }
                                 break;
                                 
                             case 'tool_call':
                                 if (typeof onToolCall === 'function') {
-                                    onToolCall(parsedData.data);
+                                    const toolCall = parsedData.data;
+                                    
+                                    // Check if we've already seen this tool call with the same data
+                                    const existingToolCall = toolCalls.get(toolCall.id);
+                                    
+                                    if (!existingToolCall || 
+                                        existingToolCall.args !== toolCall.args || 
+                                        existingToolCall.name !== toolCall.name) {
+                                        
+                                        // Keep track of tool calls we've seen
+                                        toolCalls.set(toolCall.id, toolCall);
+                                        
+                                        // Send the tool call to UI
+                                        onToolCall(toolCall);
+                                    }
                                 }
                                 break;
                                 
                             case 'tool_update':
                                 if (typeof onToolUpdate === 'function') {
-                                    onToolUpdate(parsedData.data);
+                                    const toolUpdate = parsedData.data;
+                                    
+                                    // Create a unique key for this tool update
+                                    const updateKey = `${toolUpdate.id}_${toolUpdate.status}_${toolUpdate.result || ''}`;
+                                    
+                                    // Only process this update if we haven't seen it before
+                                    if (!processedToolUpdates.has(updateKey)) {
+                                        processedToolUpdates.add(updateKey);
+                                        
+                                        // Update our tracking
+                                        if (toolUpdate.id && toolCalls.has(toolUpdate.id)) {
+                                            toolCalls.set(toolUpdate.id, {
+                                                ...toolCalls.get(toolUpdate.id),
+                                                ...toolUpdate
+                                            });
+                                        }
+                                        
+                                        // Send the update to UI
+                                        onToolUpdate(toolUpdate);
+                                    }
+                                }
+                                break;
+                                
+                            case 'info':
+                                console.log(`Info event received: ${parsedData.data}`);
+                                if (typeof onInfo === 'function') {
+                                    // Pass the temp flag if it exists
+                                    onInfo(parsedData.data, parsedData.temp === true);
+                                }
+                                break;
+                                
+                            case 'clear_temp_info':
+                                console.log('Clear temporary info message event received');
+                                if (typeof callbacks.onClearTempInfo === 'function') {
+                                    callbacks.onClearTempInfo();
+                                }
+                                break;
+                                
+                            case 'recursion_depth':
+                                console.log(`Recursion depth event: ${parsedData.data}`);
+                                // Handle both ways - through onInfo and through dedicated handler
+                                if (typeof onRecursionDepth === 'function') {
+                                    onRecursionDepth(parsedData.data);
+                                }
+                                if (typeof onInfo === 'function') {
+                                    onInfo(`Tool call recursion depth: ${parsedData.data}`);
                                 }
                                 break;
                                 
                             case 'final':
+                                console.log(`Final response received: ${parsedData.data.substring(0, 50)}...`);
                                 if (typeof onFinalResponse === 'function') {
                                     onFinalResponse(parsedData.data);
                                 }
                                 break;
                                 
                             case 'error':
+                                console.error(`Error event received: ${parsedData.data}`);
                                 if (typeof onError === 'function') {
                                     onError(parsedData.data);
                                 }
                                 break;
                                 
                             case 'done':
+                                console.log('Done event received');
                                 if (typeof onDone === 'function') {
                                     onDone();
                                 }
                                 break;
+                                
+                            default:
+                                console.warn(`Unknown event type received: ${parsedData.event}`);
                         }
                     } catch (e) {
-                        console.error('Error parsing SSE data:', e);
+                        console.error('Error parsing SSE data:', e, eventData);
                     }
                 }
                 
@@ -248,11 +332,17 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
                 onError(error.message);
             }
         }
+    } finally {
+        // Send any remaining accumulated token if needed
+        if (accumulatedToken && typeof onToken === 'function') {
+            onToken(accumulatedToken);
+        }
         
+        // Always call onDone at the end if it exists
         if (typeof onDone === 'function') {
             onDone();
         }
-    } finally {
+        
         // Clear the current controller reference
         currentController = null;
     }

@@ -78,7 +78,7 @@
 }
 
 .tool-message.compact .message-bubble {
-    padding: 0.3rem 0.5rem; /* Even smaller padding */
+    padding: 0.2rem 0.3rem; /* Reduced from 0.3rem 0.5rem */
     background-color: rgba(147, 51, 234, 0.05);
     border-color: rgba(147, 51, 234, 0.2);
 }
@@ -125,8 +125,8 @@
 
 .tool-result {
     border-top: 1px dotted var(--border-color);
-    padding-top: 0.1rem; /* Minimal padding */
-    margin-top: 0.1rem; /* Minimal margin */
+    padding-top: 0.05rem; /* Reduced from 0.1rem */
+    margin-top: 0.05rem; /* Reduced from 0.1rem */
     font-size: 0.75rem; /* Smaller font */
 }
 
@@ -135,24 +135,13 @@
     max-height: 150px;
     overflow-y: auto;
     background-color: rgba(0, 0, 0, 0.01); /* Even more subtle background */
-    padding: 0.15rem; /* Minimal padding */
+    padding: 0 0.05rem; /* Remove top/bottom padding, keep minimal left/right padding */
     border-radius: calc(var(--border-radius) - 3px);
-}
-
-.tool-result pre code {
-    font-size: 0.7rem; /* Smallest reasonably readable font */
-    line-height: 1.1; /* Very tight line height */
-    padding: 0;
-    white-space: pre-wrap; /* Allow wrapping for better mobile display */
 }
 
 /* For single-line outputs, make them even more compact */
 .tool-result.single-line pre {
-    padding: 0.1rem 0.15rem;
-}
-
-.tool-result.single-line pre code {
-    line-height: 1;
+    padding: 0 0.05rem; /* Keep minimal left/right padding but zero top/bottom */
 }
 
 .tool-result.hidden {
@@ -311,14 +300,14 @@
 
 /* Add custom style for URL links to make them stand out */
 .message-bubble a {
-    color: var(--primary-color);
-    text-decoration: none;
-    border-bottom: 1px dotted var(--primary-color);
+    color: var(--link-color);
+    text-decoration: underline;
     transition: var(--transition);
 }
 
 .message-bubble a:hover {
-    border-bottom-style: solid;
+    color: var(--link-hover-color);
+    text-decoration: underline;
 }
 
 /* Code block copy button */
@@ -605,3 +594,22 @@
 }
 
 /* DELETE ALL OTHER CONFLICTING IMAGE STYLES BELOW THIS LINE */
+
+/* Tool call styles and positioning */
+.tool-message {
+    margin-bottom: 0.25rem; /* Reduce the margin to make it closer to the assistant message */
+}
+
+.temp-info {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background-color: rgba(var(--accent-color-rgb), 0.1);
+    display: inline-block;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
+}
