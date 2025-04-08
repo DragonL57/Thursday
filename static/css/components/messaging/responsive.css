@@ -1,0 +1,42 @@
+/* Responsive design for messaging components */
+@media (max-width: 768px) {
+    .message-group {
+        padding: 0;
+    }
+    
+    .assistant-message, 
+    .user-message {
+        padding: 1rem 0.75rem;
+    }
+    
+    .message-bubble {
+        padding: 0;
+    }
+    
+    .message-bubble h1 {
+        font-size: 1.5rem;
+    }
+    
+    .message-bubble h2 {
+        font-size: 1.3rem;
+    }
+    
+    .message-group {
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .message-bubble {
+        padding: 0 0.75rem;
+    }
+    
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .message-bubble {
+        padding: 0.5rem 0.75rem;
+    }
+}

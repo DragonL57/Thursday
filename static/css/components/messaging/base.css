@@ -1,0 +1,109 @@
+/* Base message container styles */
+.messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    scroll-behavior: smooth;
+    width: 100%;
+    margin-top: 40px !important; /* Add top margin to the entire messages container */
+}
+
+.message-thread {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding-top: 1rem; /* Add padding to the entire message thread */
+    position: relative; /* Make it positioned */
+}
+
+/* Create a pseudo-element that forces space at the top */
+.message-thread::before {
+    content: '';
+    display: block;
+    height: 80px; /* Large enough to create significant space */
+    width: 100%;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Add extra padding for the first user message using multiple approaches */
+.messages .user-message:first-child,
+.messages .user-message:first-of-type {
+    margin-top: 60px !important; /* Force top margin with !important */
+}
+
+/* Also add padding to the first assistant message when no user message is present */
+.messages .assistant-message:first-child:not(#welcomeMessage),
+.messages .assistant-message:first-of-type:not(#welcomeMessage) {
+    margin-top: 60px !important; /* Force top margin with !important */
+}
+
+/* Special case for welcome message */
+#welcomeMessage {
+    margin-top: 60px !important;
+    padding-top: 30px !important;
+}
+
+.message-group {
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    animation: fade-in 0.3s ease forwards;
+    max-width: none;
+    width: 100%;
+    padding: 0;
+}
+
+/* Message stripes alternating background colors */
+.assistant-message {
+    background-color: transparent; /* Make background transparent */
+    width: 100%;
+    margin: 0;
+    padding: 0.1rem 0; /* Reduced from 1.2rem to 0.5rem */
+    border-bottom: none; /* Remove the border */
+    text-align: left;
+}
+
+.user-message {
+    background-color: transparent; /* Make background fully transparent */
+    width: 100%;
+    margin: 0;
+    padding: 0.1rem 0; /* Reduced from 1.2rem to 0.5rem */
+    border-bottom: none; /* Remove the border */
+    text-align: left;
+}
+
+/* Message content containers */
+.message-content {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+}
+
+.message-content-container {
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Ensure user messages are properly aligned to the right */
+.user-message .message-content-container {
+    align-items: flex-end;
+}
+
+.assistant-message .message-content-container {
+    align-items: flex-start;
+}
+
+/* Hide avatars as per ChatGPT style */
+.message-avatar {
+    display: none;
+}
+
+/* Basic animation */
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

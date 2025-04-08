@@ -1,0 +1,80 @@
+/* Message bubble styling */
+.message-bubble {
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0 1rem;
+    box-shadow: none;
+    overflow-wrap: break-word;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    display: inline-block;
+}
+
+/* User message specifics - updated to light gray pill shape with dynamic width */
+.user-message .message-bubble {
+    background-color: var(--message-user-bg, #f0f0f0); /* Light gray color */
+    color: var(--text-primary, #333); /* Dark text for contrast */
+    max-width: 80%; /* Maximum width constraint */
+    width: fit-content; /* Allow width to adapt to content */
+    display: inline-block; /* Required for width:fit-content to work properly */
+    border-radius: 18px;
+    padding: 0.6rem 1rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    text-align: left;
+    white-space: pre-wrap;
+    margin-left: auto; /* Push to the right */
+    margin-right: 0;
+}
+
+/* Update container to support right alignment with transparent background */
+.user-message .message-content-container {
+    align-items: flex-end;
+    padding-right: 1rem;
+    background-color: transparent; /* Ensure container is transparent */
+}
+
+/* User message group should have transparent background */
+.user-message {
+    background-color: transparent; /* Make sure the group container is transparent */
+}
+
+/* Assistant message specifics */
+.assistant-message .message-bubble {
+    max-width: 100%;
+    text-align: left;
+    background-color: transparent; /* Ensure transparency */
+    box-shadow: none; /* Remove any shadow */
+    border: none; /* Remove any border */
+}
+
+/* Info messages */
+.info-message {
+    margin: 0.5rem auto;
+    padding: 0.5rem 1rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.9rem;
+    max-width: 800px;
+}
+
+.temp-info-message {
+    margin: 0.5rem auto;
+    padding: 0.25rem 0.5rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.9rem;
+    background-color: rgba(var(--accent-color-rgb, 0, 0, 0), 0.05);
+    border-radius: 4px;
+    max-width: 800px;
+}
+
+/* Additional spacing for single character lines */
+.message-bubble br + br {
+    display: block;
+    content: "";
+    margin-top: 0.5em;
+}

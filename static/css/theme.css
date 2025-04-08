@@ -1,0 +1,62 @@
+/* Theme variables */
+:root {
+    /* Core colors - monotone scheme */
+    --primary-color: #445566; /* Main slate color instead of green */
+    --primary-hover: #334455; /* Darker slate for hover */
+    --secondary-color: #667788; /* Medium slate */
+    
+    /* Add RGB values for transparency calculations */
+    --primary-color-rgb: 68, 85, 102; /* RGB value of #445566 */
+    
+    /* Link colors */
+    --link-color: #445566; /* Match primary color */
+    --link-hover-color: #334455; /* Match primary hover */
+    
+    /* Light theme - Updated to monotone */
+    --bg-color: #FFFFFF; /* White background for main content */
+    --surface-color: #FFFFFF; /* White for surface elements */
+    --border-color: #D1D5DB; /* Light Grey for borders */
+    --text-primary: #202830; /* Very Dark slate for primary text */
+    --text-secondary: #667788; /* Medium slate for secondary text */
+    --text-tertiary: #556677; /* Dark slate for tertiary elements */
+    --sidebar-bg: #F7F7F8; /* Very Light Grey for sidebar */
+    --message-user-bg: #F4F4F5; /* Very Light Grey for user messages */
+    --message-assistant-bg: #FFFFFF; /* White for assistant messages */
+    --message-user-border: #D1D5DB; /* Light Grey for user message borders */
+    --message-assistant-border: #D1D5DB; /* Light Grey for assistant message borders */
+    --code-bg: #F4F4F5; /* Very Light Grey for code blocks */
+    --highlight-bg: #ECECF1; /* Light Grey for highlighting/selection */
+
+    /* Other variables */
+    --border-radius: 8px;
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.05);
+    --transition: all 0.2s ease;
+    --header-height: 48px; /* Reduced height */
+    --sidebar-width: 260px;
+    --input-height: 60px;
+}
+
+/* Dark theme */
+.dark-mode {
+    --bg-color: #202123; /* Main dark charcoal grey */
+    --surface-color: #343541; /* Medium grey */
+    --border-color: #2D2E30; /* Slightly lighter grey */
+    --text-primary: #ECECEC; /* Light grey/off-white */
+    --text-secondary: #8E8EA0; /* Muted grey */
+    --text-tertiary: #B4B4BB; /* Slightly darker grey for icons */
+    --sidebar-bg: #202123; /* Main dark charcoal grey */
+    --message-user-bg: #343541; /* Medium grey for user messages */
+    --message-assistant-bg: #202123; /* Main background color for assistant messages */
+    --message-assistant-border: #2D2E30;
+    --code-bg: #2D2E30; /* Slightly lighter for code blocks */
+    --highlight-bg: #2D2E30; /* Slightly lighter for highlighting */
+    
+    /* Dark mode link colors - monotone */
+    --link-color: #99AABB; /* Lighter slate for dark mode */
+    --link-hover-color: #AABBCC; /* Even lighter slate on hover for dark mode */
+    --primary-color: #667788; /* Lighter primary for dark mode */
+    --primary-hover: #778899; /* Even lighter on hover */
+    --primary-color-rgb: 102, 119, 136; /* RGB value of #667788 for dark mode */
+}

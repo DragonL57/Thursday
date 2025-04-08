@@ -1,0 +1,12 @@
+/* Main CSS file that imports all component styles */
+@import 'theme.css';
+@import 'base.css';
+@import 'layout.css';
+@import 'utilities.css';
+@import 'components/buttons.css';
+@import 'components/inputs.css';
+@import 'components/messaging/index.css'; /* New modular messaging styles */
+/* Removed: @import 'components/messaging/tool-display.css'; */
+/* Removed: @import 'components/messaging/tool-status.css'; */
+@import 'components/modals.css';
+@import 'components/sidebar.css';

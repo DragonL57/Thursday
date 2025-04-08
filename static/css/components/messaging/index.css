@@ -1,0 +1,48 @@
+/* Messaging Components - Main Import File */
+
+/* Import all messaging component styles */
+@import 'base.css';
+@import 'bubbles.css';
+@import 'typography.css';
+@import 'code.css';
+@import 'tools.css'; /* This is the only tool styling we need */
+@import 'media.css';
+@import 'math.css';
+@import 'welcome.css';
+@import 'thinking.css';
+@import 'buttons.css';
+@import 'responsive.css';
+
+/* Message container styles to properly constrain content */
+.message-content-container {
+    width: auto; /* Don't force full width */
+    box-sizing: border-box;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* Assistant message bubbles should align left */
+.assistant-message .message-bubble {
+    max-width: calc(100% - 50px);
+    margin-left: 0;
+    margin-right: auto;
+    box-sizing: border-box;
+}
+
+/* User messages stay right-aligned */
+.user-message .message-bubble {
+    max-width: calc(100% - 50px);
+    margin-left: auto;
+    margin-right: 0;
+    box-sizing: border-box;
+}
+
+/* Tool containers should use full width */
+.tool-list-wrapper,
+.tool-display-container {
+    width: 100%; /* Change from auto to 100% */
+    max-width: 100%; /* Set max-width to 100% instead of a fixed value */
+    align-self: stretch; /* Make it stretch to full width */
+}

@@ -1,0 +1,30 @@
+/* Welcome message styling */
+.welcome-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 60vh;
+    text-align: center;
+    padding: 2rem;
+    background-color: transparent;
+    border-bottom: none;
+}
+
+.welcome-message.assistant-message {
+    background-color: var(--bg-color);
+    border-bottom: none;
+}
+
+.welcome-message .message-bubble {
+    max-width: 600px;
+    text-align: center;
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.welcome-message .message-bubble p {
+    font-size: 2rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}

@@ -1,0 +1,127 @@
+/* Messaging-specific button styles */
+
+/* Stop generation button */
+.stop-button {
+    color: white;
+    background-color: #E34234;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    cursor: pointer !important; /* Force pointer cursor */
+    opacity: 1 !important; /* Ensure full opacity */
+    pointer-events: auto !important; /* Make sure it's clickable */
+}
+
+.stop-button:hover {
+    background-color: #C53727;
+}
+
+/* Override any disabled state for stop button */
+.stop-button:disabled {
+    opacity: 1 !important;
+    cursor: pointer !important;
+    background-color: #E34234 !important;
+    pointer-events: auto !important;
+}
+
+/* Generation stopped note */
+.generation-stopped-note {
+    color: var(--text-tertiary);
+    font-style: italic;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+/* Input wrapper styling when generating */
+.input-wrapper.generating {
+    opacity: 0.7;
+    border-color: var(--border-color);
+    box-shadow: none;
+    background-color: var(--bg-color);
+}
+
+.input-wrapper.generating textarea {
+    cursor: not-allowed;
+}
+
+/* Copy markdown button for messages - updated for hover visibility */
+.copy-markdown-button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent; /* Make background transparent */
+    border-radius: 4px;
+    padding: 0.25rem;
+    margin-top: 0.5rem;
+    margin-left: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer !important;
+    opacity: 0; /* Hide by default */
+    transition: opacity 0.2s ease, transform 0.1s ease;
+    z-index: 15;
+    height: 24px;
+    width: 24px;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Show copy button when hovering over message content container */
+.message-content-container:hover .copy-markdown-button {
+    opacity: 0.7; /* Show when hovering */
+}
+
+/* Different positioning for user messages */
+.user-message .copy-markdown-button {
+    margin-right: 8px; /* Give some space on the right side */
+    margin-left: 0;
+}
+
+.copy-markdown-button:hover {
+    opacity: 1 !important;
+    transform: scale(1.05);
+}
+
+.copy-markdown-button:active {
+    transform: scale(0.95);
+}
+
+.copy-markdown-button.copied {
+    background-color: transparent;
+    color: var(--primary-color, #10a37f);
+}
+
+.dark-mode .copy-markdown-button {
+    background-color: transparent;
+}
+
+.dark-mode .copy-markdown-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Feedback element for copy */
+.copy-feedback {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--primary-color);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+}
+
+.copy-feedback.visible {
+    opacity: 1;
+}

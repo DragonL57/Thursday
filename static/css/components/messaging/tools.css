@@ -1,0 +1,370 @@
+/* Unified Tool Styling - Minimalistic Version */
+
+/* Base Tool Message - Mirror assistant message structure */
+.tool-message {
+    background-color: transparent;
+    width: 100%;
+    margin: 0;
+    padding: 0.1rem 0;
+    text-align: left;
+    order: 2; /* Higher order value to appear after user message */
+}
+
+/* Special styling for tools positioned after user messages */
+.tool-message[data-placement="after-user"] {
+    margin-top: 4px; /* Add spacing after user message */
+    margin-bottom: 12px; /* Add spacing before assistant message */
+    border-left: 3px solid var(--primary-color);
+    padding-left: 8px;
+}
+
+/* Add a subtle connecting line */
+.tool-message[data-placement="after-user"]::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -3px;
+    width: 3px;
+    height: 4px;
+    background-color: var(--primary-color);
+}
+
+.tool-message .message-content-container {
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.tool-message .message-bubble {
+    max-width: 100%;
+    width: 100%; /* Ensure full width inside the message bubble */
+    text-align: left;
+    background-color: transparent;
+    box-shadow: none;
+    border: none;
+    padding: 0 1rem;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8rem;
+    overflow: visible; /* Allow tool containers to be visible even when list is collapsed */
+}
+
+/* Tool Container - styled like assistant text but with improved colors */
+.tool-container {
+    background-color: rgba(var(--primary-color-rgb, 68, 85, 102), 0.04);
+    border: 1px solid rgba(var(--primary-color-rgb, 68, 85, 102), 0.1);
+    border-radius: 6px;
+    border-left: 2px solid var(--primary-color);
+    padding: 0.4rem 0.6rem;
+    margin: 0;
+    width: 100%; /* Ensure the container takes full width */
+    max-width: 100%;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1); /* Enhanced easing curve for smoother animation */
+    cursor: pointer;
+    transform-origin: top center; /* Establish transform origin for animations */
+    box-sizing: border-box; /* Ensure padding is included in width calculation */
+}
+
+.tool-container[data-status="completed"] {
+    border-left-color: var(--primary-color);
+}
+
+.tool-container[data-status="error"] {
+    border-left-color: #d32f2f;
+}
+
+/* Tool Header */
+.tool-header {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    position: relative;
+}
+
+.tool-name {
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.tool-args {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Status Indicator */
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--text-tertiary);
+    margin-left: auto;
+}
+
+.tool-container[data-status="pending"] .status-indicator {
+    animation: pulse 1.5s infinite cubic-bezier(0.4, 0, 0.6, 1); /* Improved pulse animation */
+}
+
+.tool-container[data-status="completed"] .status-indicator {
+    background-color: var(--primary-color);
+}
+
+.tool-container[data-status="error"] .status-indicator {
+    background-color: #d32f2f;
+}
+
+/* Tool collapse indicator */
+.tool-header::after {
+    content: '▼';
+    position: absolute;
+    right: 24px;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1); /* Enhanced easing curve */
+}
+
+.tool-container.collapsed .tool-header::after {
+    transform: rotate(-90deg);
+}
+
+/* Tool Result - improved styling */
+.tool-result {
+    background-color: rgba(var(--primary-color-rgb, 68, 85, 102), 0.03);
+    border-radius: 4px;
+    margin-top: 0.2rem;
+    padding: 0.4rem 0.6rem;
+    max-height: 150px;
+    overflow: auto;
+    border-radius: 4px;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1); /* Enhanced easing curve */
+}
+
+.tool-result pre {
+    margin: 0;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.75rem;
+    line-height: 1.3;
+}
+
+.tool-result code {
+    background: none;
+    padding: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text-primary); /* Use theme variable instead of hard-coded color */
+}
+
+.tool-result.error {
+    background-color: rgba(211, 47, 47, 0.08);
+    border-left: 2px solid rgba(211, 47, 47, 0.5);
+}
+
+.tool-result.error code {
+    color: #d32f2f;
+}
+
+.tool-result.hidden {
+    display: none;
+}
+
+.tool-container.collapsed .tool-result {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Tool List - Collapsible Container with improved colors */
+.tool-list {
+    padding: 6px;
+    margin-bottom: 8px;
+    background-color: rgba(var(--primary-color-rgb, 68, 85, 102), 0.03);
+    border-radius: 8px;
+    border: 1px solid rgba(var(--primary-color-rgb, 68, 85, 102), 0.1);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%; /* Change from fit-content to full width */
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1); /* Enhanced easing curve with longer duration */
+    max-height: 500px; /* Enough room for several tools when expanded */
+    overflow-y: auto; /* Make it scrollable when there are many tools */
+    cursor: pointer;
+    /* Make sure the element is always displayed */
+    min-height: 30px;
+    box-sizing: border-box; /* Ensure padding is included in width calculation */
+}
+
+/* Explicit tool list header that will always be visible */
+.tool-list-header {
+    font-size: 0.75rem;
+    color: var(--primary-color);
+    margin-bottom: 6px;
+    font-weight: 500;
+    padding-right: 20px; /* Make room for the toggle button */
+    position: relative;
+    cursor: pointer;
+    display: flex !important;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 24px;
+    z-index: 10; /* Ensure header is above other elements */
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    user-select: none; /* Prevent text selection when clicking */
+}
+
+/* Toggle arrow for the tool list */
+.tool-list-toggle {
+    position: absolute;
+    right: 0;
+    top: 2px;
+    color: var(--primary-color);
+    font-size: 0.7rem;
+    transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    z-index: 21 !important; /* Higher than header */
+}
+
+/* Keep the old ::before for backward compatibility, but make it less important */
+.tool-list::before {
+    content: '';
+    display: none;
+}
+
+/* Collapsed state */
+.tool-list.collapsed {
+    max-height: 35px !important; /* Increased from 30px to ensure header visibility */
+    min-height: 35px !important; /* Increased from 30px to ensure header visibility */
+    overflow: hidden;
+    display: flex !important; /* Force display */
+    flex-direction: column;
+}
+
+.tool-list.collapsed .tool-list-toggle {
+    transform: rotate(-90deg);
+}
+
+/* When collapsed, hide the tool containers but keep the header visible */
+.tool-list.collapsed > :not(.tool-list-header) {
+    display: none !important; /* Use display instead of height/transform for more reliable toggling */
+}
+
+/* Add !important to ensure these styles apply when expanded */
+.tool-list:not(.collapsed) > * {
+    display: block !important; /* Force display when not collapsed */
+}
+
+.tool-list:not(.collapsed) {
+    max-height: 500px !important; /* Ensure enough height when expanded */
+}
+
+/* Make sure the header is always visible and clickable in collapsed state */
+.tool-list.collapsed .tool-list-header {
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: flex !important;
+    pointer-events: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding-right: 20px !important;
+    min-height: 24px !important;
+    transform: none !important;
+    cursor: pointer !important; /* Ensure cursor is pointer */
+    z-index: 20 !important; /* Ensure it's above other elements */
+}
+
+/* Style the tool containers for smooth transitions */
+.tool-list .tool-container {
+    transition: opacity 0.4s cubic-bezier(0.25, 1, 0.5, 1), 
+                transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Adding enter animation for new tools */
+.tool-container.new-tool {
+    animation: tool-enter 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@keyframes tool-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Ensure tools display with proper spacing between user and assistant messages */
+.user-message + .tool-message + .assistant-message {
+    margin-top: 0;
+}
+
+/* Space between tool containers */
+.tool-container + .tool-container {
+    margin-top: 0.2rem;
+}
+
+/* Override index.css styles that might limit tool container width */
+.tool-list-wrapper,
+.tool-display-container {
+    width: 100% !important; /* Override any width restrictions with !important */
+    max-width: 100% !important; /* Override max-width restrictions */
+    align-self: stretch !important; /* Make it stretch to full width */
+}
+
+/* Dark Mode - Enhanced for better visibility and aesthetics */
+.dark-mode .tool-message .message-bubble {
+    background-color: transparent;
+}
+
+.dark-mode .tool-container {
+    background-color: rgba(var(--primary-color-rgb, 102, 119, 136), 0.1);
+    border-color: rgba(var(--primary-color-rgb, 102, 119, 136), 0.2);
+}
+
+.dark-mode .tool-name {
+    color: var(--primary-color); /* Will be a lighter shade in dark mode */
+}
+
+.dark-mode .tool-list {
+    background-color: rgba(var(--primary-color-rgb, 102, 119, 136), 0.08);
+    border-color: rgba(var(--primary-color-rgb, 102, 119, 136), 0.15);
+}
+
+.dark-mode .tool-list-header {
+    color: var(--primary-color); /* Will be a lighter shade in dark mode */
+}
+
+.dark-mode .tool-result {
+    background-color: rgba(30, 30, 30, 0.4);
+    border: 1px solid rgba(60, 60, 60, 0.3);
+}
+
+.dark-mode .tool-result.error {
+    background-color: rgba(211, 47, 47, 0.15);
+    border-left: 2px solid rgba(211, 47, 47, 0.6);
+}
+
+.dark-mode .tool-result code {
+    color: rgba(255, 255, 255, 0.9); /* Improved contrast for dark mode */
+}
+
+/* Animation */
+@keyframes pulse {
+    0% { opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { opacity: 0.3; }
+}

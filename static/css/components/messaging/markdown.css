@@ -1,0 +1,144 @@
+/* Enhanced markdown rendering styles */
+
+/* Improve spacing between elements */
+.markdown-content > * {
+    margin-bottom: 0.8em;
+}
+
+/* Ensure proper word wrapping and spacing */
+.markdown-content {
+    white-space: pre-wrap;       /* Preserve white space and wrap lines */
+    word-break: break-word;      /* Break words only if necessary */
+    word-wrap: break-word;       /* Legacy setting for IE */
+    overflow-wrap: break-word;   /* Modern standard */
+}
+
+/* Fix formatting for headers */
+.markdown-content h1, 
+.markdown-content h2, 
+.markdown-content h3, 
+.markdown-content h4, 
+.markdown-content h5, 
+.markdown-content h6 {
+    margin-top: 1.2em;
+    margin-bottom: 0.8em;
+    line-height: 1.2;
+    font-weight: 600;
+}
+
+/* Fix spacing for lists */
+.markdown-content ul,
+.markdown-content ol {
+    padding-left: 1.5em;
+    margin-top: 0.5em;
+    margin-bottom: 0.8em;
+}
+
+.markdown-content li {
+    margin-bottom: 0.3em;
+}
+
+.markdown-content li p {
+    margin-top: 0;
+    margin-bottom: 0.5em;
+}
+
+/* Fix spacing for paragraphs */
+.markdown-content p {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+    line-height: 1.5;
+}
+
+/* Fix blockquotes */
+.markdown-content blockquote {
+    border-left: 3px solid var(--border-color);
+    margin-left: 0;
+    padding-left: 1em;
+    color: var(--text-secondary);
+}
+
+/* Fix horizontal rules */
+.markdown-content hr {
+    border: 0;
+    border-top: 1px solid var(--border-color);
+    margin: 1.5em 0;
+}
+
+/* Fix code blocks */
+.markdown-content pre {
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    padding: 0.8em;
+    overflow-x: auto;
+    margin: 1em 0;
+}
+
+/* Fix inline code */
+.markdown-content code:not(pre code) {
+    background-color: var(--bg-secondary);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+/* Fix tables */
+.markdown-content table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid var(--border-color);
+    padding: 0.5em 0.8em;
+    text-align: left;
+}
+
+.markdown-content th {
+    background-color: var(--bg-secondary);
+}
+
+/* Fix bold and italic */
+.markdown-content strong {
+    font-weight: 600;
+}
+
+.markdown-content em {
+    font-style: italic;
+}
+
+/* Fix links */
+.markdown-content a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.markdown-content a:hover {
+    text-decoration: underline;
+}
+
+/* Fix spacing between paragraphs and other elements */
+.markdown-content p + p,
+.markdown-content ul + p,
+.markdown-content ol + p {
+    margin-top: 1em;
+}
+
+/* Ensure spaces are preserved in pre-formatted text */
+.markdown-content pre, 
+.markdown-content code {
+    white-space: pre-wrap !important;
+}
+
+/* Fix text alignment and spacing */
+.message-bubble {
+    word-spacing: normal !important;
+    letter-spacing: normal !important;
+}
+
+/* Ensure proper word spacing throughout document */
+.message-bubble * {
+    word-spacing: normal !important;
+}

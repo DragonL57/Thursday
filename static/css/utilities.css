@@ -1,0 +1,78 @@
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
+/* Responsive design - updated without sidebar references */
+@media (max-width: 992px) {
+    /* Sidebar-related styles removed */
+    
+    .mobile-only {
+        display: flex;
+    }
+}
+
+@media (min-width: 993px) {
+    .mobile-only {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .message-group {
+        padding: 0;
+    }
+    
+    .assistant-message, 
+    .user-message {
+        padding: 1rem 0.75rem;
+    }
+    
+    .message-bubble {
+        padding: 0;
+    }
+    
+    .input-container {
+        padding: 0.75rem 0.75rem 1.5rem;
+    }
+    
+    .message-bubble h1 {
+        font-size: 1.5rem;
+    }
+    
+    .message-bubble h2 {
+        font-size: 1.3rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .app-header {
+        padding: 0 0.75rem;
+    }
+    
+    .logo h1 {
+        font-size: 0.9rem;
+    }
+    
+    .message-group {
+        gap: 0.5rem;
+    }
+    
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .message-bubble {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .suggestion-chips {
+        padding: 0;
+    }
+    
+    .chip {
+        padding: 0.3rem 0.6rem;
+        font-size: 0.8rem;
+    }
+}

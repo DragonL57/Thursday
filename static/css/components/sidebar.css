@@ -1,0 +1,288 @@
+/* Sidebar styles */
+.sidebar {
+    width: var(--sidebar-width);
+    height: 100%;
+    background-color: var(--sidebar-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 20;
+    transition: transform 0.3s ease;
+    overflow: hidden;
+}
+
+/* Hide sidebar by default on mobile */
+@media (max-width: 768px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+    
+    .sidebar.active {
+        transform: translateX(0);
+    }
+}
+
+/* Sidebar header */
+.sidebar-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    display: none;
+}
+
+/* New chat button */
+.new-chat-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background-color: var(--surface-color);
+    color: var(--text-primary);
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.new-chat-button:hover {
+    background-color: var(--highlight-bg);
+}
+
+/* Sidebar sections */
+.sidebar-section {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+/* Section header with title and button */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.sidebar-section-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding-left: 0.5rem;
+    margin-bottom: 0; /* Remove bottom margin since we're using section-header */
+}
+
+/* Small new chat icon button */
+.new-chat-icon {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000000; /* Black color in light mode */
+    transition: var(--transition);
+    background-color: transparent;
+    border-radius: 50%;
+}
+
+.new-chat-icon .material-icons-round {
+    font-size: 20px;
+    color: inherit; /* Explicitly inherit color from parent */
+    /* Force black in light mode to override any other styling */
+    color: #000000;
+    font-weight: bold; /* Make icon bolder for visibility */
+}
+
+.new-chat-icon:hover {
+    transform: scale(1.1);
+    color: var(--primary-color);
+}
+
+/* Chat history list */
+.chat-history {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.chat-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0.5rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 0.25rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: var(--transition);
+    font-size: 0.95rem;
+}
+
+.chat-item:hover {
+    background-color: var(--highlight-bg);
+    color: var(--text-primary);
+}
+
+.chat-item.active {
+    background-color: var(--highlight-bg);
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.chat-item-content {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 60px); /* Leave room for action buttons */
+}
+
+.chat-item .material-icons-round {
+    font-size: 1.1rem;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.chat-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Chat item actions */
+.chat-actions {
+    display: none;
+    gap: 0.25rem;
+}
+
+.chat-item:hover .chat-actions {
+    display: flex;
+}
+
+.chat-action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    color: var(--text-tertiary);
+    transition: var(--transition);
+}
+
+.chat-action-button:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    color: var(--text-primary);
+}
+
+.chat-action-button .material-icons-round {
+    font-size: 16px;
+    margin: 0;
+}
+
+.dark-mode .chat-action-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Sidebar footer */
+.sidebar-footer {
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.username {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.sidebar-settings-button {
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+.sidebar-settings-button:hover {
+    color: var(--text-primary);
+}
+
+/* Toggle button (mobile) */
+.sidebar-toggle {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+    z-index: 30;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .sidebar-toggle {
+        display: flex;
+    }
+}
+
+/* Dark mode adjustments */
+.dark-mode .sidebar {
+    box-shadow: none;
+}
+
+.dark-mode .new-chat-button {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark-mode .new-chat-button:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark-mode .chat-item:hover,
+.dark-mode .chat-item.active {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark mode icon color */
+.dark-mode .new-chat-icon {
+    color: white; /* White icon in dark mode */
+}
+
+.dark-mode .new-chat-icon:hover {
+    color: rgba(255, 255, 255, 0.8); /* Slightly dimmed white on hover */
+}
+
+.dark-mode .new-chat-icon .material-icons-round {
+    color: white; /* Explicitly set white for the icon in dark mode */
+}

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thursday</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <!-- Removed: <link rel="stylesheet" href="{{ url_for('static', filename='css/components/messaging/tool-themes.css') }}"> -->
+    <!-- Removed: <link rel="stylesheet" href="{{ url_for('static', filename='css/components/messaging/tool-status.css') }}"> -->
+    <!-- Removed: <link rel="stylesheet" href="{{ url_for('static', filename='css/components/messaging/tool-display.css') }}"> -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
+    <!-- Remove Google Fonts link for Inter and keep only Material Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.0.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <!-- Add this after loading KaTeX but before loading your app.js -->
+    <script>
+// Helper function to convert common math notation to LaTeX with significantly improved pattern matching
+document.addEventListener('DOMContentLoaded', function() {
+    // Track processed elements to avoid infinite loops
+    const processedElements = new WeakSet();
+    let isProcessing = false;
+    
+    // Process any content with math notation
+    function processMathContent(element) {
+        if (processedElements.has(element) || isProcessing) return;
+        
+        // Mark as processed to prevent infinite loops
+        processedElements.add(element);
+        isProcessing = true;
+        
+        try {
+            const contentToProcess = element.innerHTML;
+            
+            // Only perform replacement if we find potential math patterns
+            if (/([\(\[]).*?[=+\-*/\\].*?[\)\]]|\\begin\{align\*?\}/.test(contentToProcess)) {
+                // Create a temporary div to work with the content
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = contentToProcess;
+                
+                // Process text nodes for parenthetical math expressions
+                const walker = document.createTreeWalker(
+                    tempDiv, 
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+                
+                const nodesToReplace = [];
+                let currentNode;
+                
+                // Find all nodes that need replacement
+                while (currentNode = walker.nextNode()) {
+                    const text = currentNode.nodeValue;
+                    
+                    // Convert (F(n) = F(n-1) + F(n-2)) style expressions
+                    if(/\([^()]*?[A-Za-z]\([^()]*?\)[^()]*?=.*?\)/.test(text)) {
+                        nodesToReplace.push({
+                            node: currentNode,
+                            newText: text.replace(/\(([^()]*?[A-Za-z]\([^()]*?\)[^()]*?=.*?)\)/g, '\\($1\\)')
+                        });
+                    }
+                    // Convert simpler (x = y) expressions
+                    else if(/\([^()]*?=.*?\)/.test(text)) {
+                        nodesToReplace.push({
+                            node: currentNode,
+                            newText: text.replace(/\(([^()]*?=.*?)\)/g, '\\($1\\)')
+                        });
+                    }
+                    // Convert expressions with mathematical symbols/keywords
+                    else if(/\(.*?(\\[a-zA-Z]+|\\geq|\\leq|\\approx).*?\)/.test(text)) {
+                        nodesToReplace.push({
+                            node: currentNode,
+                            newText: text.replace(/\((.*?(\\[a-zA-Z]+|\\geq|\\leq|\\approx).*?)\)/g, '\\($1\\)')
+                        });
+                    }
+                }
+                
+                // Apply replacements
+                for (const replacement of nodesToReplace) {
+                    replacement.node.nodeValue = replacement.newText;
+                }
+                
+                // Handle cases environment with better preservation
+                if (/\\begin\{cases\}/.test(tempDiv.innerHTML)) {
+                    tempDiv.innerHTML = tempDiv.innerHTML.replace(
+                        /\[([\s\S]*?)\\begin\{cases\}([\s\S]*?)\\end\{cases\}([\s\S]*?)\]/g, 
+                        '\\[$1\\begin{cases}$2\\end{cases}$3\\]'
+                    );
+                }
+                
+                // Handle align environments better
+                if (/\\begin\{align\*?\}/.test(tempDiv.innerHTML)) {
+                    tempDiv.innerHTML = tempDiv.innerHTML.replace(
+                        /\[([\s\S]*?)\\begin\{align\*?\}([\s\S]*?)\\end\{align\*?\}([\s\S]*?)\]/g, 
+                        '$$[$1\\begin{align*}$2\\end{align*}$3]$$'
+                    );
+                }
+                
+                element.innerHTML = tempDiv.innerHTML;
+            }
+        } catch (e) {
+            console.error('Error processing math content:', e);
+        } finally {
+            isProcessing = false;
+        }
+    }
+    
+    // Process messages once they're added
+    const observer = new MutationObserver(mutations => {
+        requestAnimationFrame(() => {
+            mutations.forEach(mutation => {
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            if (node.classList && node.classList.contains('message-bubble')) {
+                                processMathContent(node);
+                            } else {
+                                const bubbles = node.querySelectorAll('.message-bubble');
+                                bubbles.forEach(bubble => processMathContent(bubble));
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    });
+    
+    // Observe messages container
+    const messages = document.getElementById('messages');
+    if (messages) {
+        observer.observe(messages, { 
+            childList: true, 
+            subtree: true,
+            characterData: false
+        });
+    }
+});
+</script>
+    <script type="module" src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <button class="new-chat-button">
+                    <span class="material-icons-round">add</span>
+                    New Chat
+                </button>
+            </div>
+            
+            <div class="sidebar-section">
+                <div class="section-header">
+                    <h3 class="sidebar-section-title">Recent Conversations</h3>
+                    <button class="icon-button new-chat-icon" title="New chat">
+                        <span class="material-icons-round">add_circle</span>
+                    </button>
+                </div>
+                <ul class="chat-history">
+                    <li class="chat-item active">
+                        <span class="material-icons-round">chat</span>
+                        <span>Current Conversation</span>
+                    </li>
+                    <li class="chat-item">
+                        <span class="material-icons-round">chat</span>
+                        <span>Python Project Ideas</span>
+                    </li>
+                    <li class="chat-item">
+                        <span class="material-icons-round">chat</span>
+                        <span>Web Development Tips</span>
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar">U</div>
+                    <div class="user-info">
+                        <div class="username">User</div>
+                    </div>
+                </div>
+                <button class="sidebar-settings-button">
+                    <span class="material-icons-round">settings</span>
+                </button>
+            </div>
+        </aside>
+        
+        <!-- Mobile sidebar toggle -->
+        <div class="sidebar-toggle">
+            <span class="material-icons-round">menu</span>
+        </div>
+
+        <!-- Header removed -->
+
+        <div class="app-body">
+            <main class="chat-container">
+                <div class="messages" id="messages">
+                    <div class="message-group assistant-message welcome-message" id="welcomeMessage">
+                        <div class="message-content">
+                            <div class="message-content-container">
+                                <div class="message-bubble">
+                                    <p>Hello! I'm Thursday. How can I help you today?</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Messages will be added here dynamically -->
+                </div>
+                
+                <div class="input-container">
+                    <form id="messageForm" onsubmit="console.log('Form submitted via onsubmit attribute'); return false;">
+                        <div class="input-wrapper">
+                            <textarea 
+                                id="userInput" 
+                                placeholder="Message Thursday... (paste images with Ctrl+V)" 
+                                rows="1" 
+                                autocomplete="off"
+                            ></textarea>
+                            <div id="imagePreviewContainer" class="image-preview-container hidden"></div>
+                            <div class="input-actions">
+                                <button type="button" id="attachButton" class="icon-button" title="Attach a file">
+                                    <span class="material-icons-round">attach_file</span>
+                                </button>
+                                <button type="submit" id="sendButton" class="send-button">
+                                    <span class="material-icons-round">send</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="suggestion-chips" id="suggestionChips">
+                            <button type="button" class="chip">Tell me about Python</button>
+                            <button type="button" class="chip">Help me debug my code</button>
+                            <button type="button" class="chip">Explain Docker containers</button>
+                        </div>
+                    </form>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <div class="loading-indicator hidden" id="loadingIndicator">
+        <div class="spinner"></div>
+        <span>Thinking...</span>
+    </div>
+
+    <!-- Modal template -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="close-modal">
+                    <span class="material-icons-round">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="settings-option">
+                    <label>Theme</label>
+                    <div class="theme-selector">
+                        <label class="theme-option">
+                            <input type="radio" name="theme" value="light" id="lightTheme" checked>
+                            <span class="theme-label">
+                                <span class="material-icons-round">light_mode</span> Light
+                            </span>
+                        </label>
+                        <label class="theme-option">
+                            <input type="radio" name="theme" value="dark" id="darkTheme">
+                            <span class="theme-label">
+                                <span class="material-icons-round">dark_mode</span> Dark
+                            </span>
+                        </label>
+                    </div>
+                </div>
+                <div class="settings-option">
+                    <label for="providerSelect">AI Provider</label>
+                    <select id="providerSelect">
+                        <option value="pollinations">Pollinations AI</option>
+                        <option value="litellm">LiteLLM</option>
+                    </select>
+                </div>
+                <div class="settings-option">
+                    <label for="modelSelect">Model</label>
+                    <select id="modelSelect">
+                        <!-- Replace integrated GPT-4o with separate provider options -->
+                        <option value="openai-large" data-provider="pollinations">Pollinations: GPT-4o</option>
+                        <option value="github/gpt-4o" data-provider="litellm">GitHub: GPT-4o</option>
+                        <!-- Keep Gemini as an alternative option -->
+                        <option value="gemini/gemini-2.0-flash" data-provider="litellm">LiteLLM: Gemini 2.0 Flash</option>
+                    </select>
+                </div>
+                <div class="settings-option">
+                    <label for="temperatureSlider">Temperature</label>
+                    <input type="range" id="temperatureSlider" min="0" max="1" step="0.1" value="1">
+                    <span id="temperatureValue">1</span>
+                </div>
+                <div class="settings-option">
+                    <label for="maxTokensInput">Max Tokens</label>
+                    <input type="number" id="maxTokensInput" min="100" max="32000" step="100" value="8192">
+                </div>
+                <div class="settings-option">
+                    <label>
+                        <input type="checkbox" id="saveChatHistory"> 
+                        Save chat history
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary-button close-modal">Cancel</button>
+                <button class="primary-button" id="saveSettings">Save</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

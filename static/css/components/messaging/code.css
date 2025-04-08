@@ -1,0 +1,95 @@
+/* Code block styling */
+.code-block {
+    margin: 1rem 0;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.code-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    background-color: rgba(0,0,0,0.03);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    margin: 0;
+    width: 100%;
+}
+
+.language-indicator {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.copy-code {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0.7;
+    transition: var(--transition);
+    background-color: rgba(0,0,0,0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.copy-code:hover {
+    opacity: 1;
+    background-color: rgba(0,0,0,0.15);
+}
+
+/* Code blocks */
+.message-bubble pre {
+    background-color: var(--code-bg);
+    border-radius: var(--border-radius);
+    padding: 0.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border: 1px solid var(--border-color);
+    white-space: pre-wrap;
+}
+
+.message-bubble pre code {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.message-bubble code:not(pre code) {
+    background-color: var(--code-bg);
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* Remove nested styling in code blocks */
+.code-block pre {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* Dark mode adjustments */
+.dark-mode .code-header {
+    background-color: rgba(255,255,255,0.05);
+}
+
+.dark-mode .copy-code {
+    background-color: rgba(255,255,255,0.1);
+}
+
+.dark-mode .copy-code:hover {
+    background-color: rgba(255,255,255,0.15);
+}
