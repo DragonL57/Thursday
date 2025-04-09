@@ -97,6 +97,17 @@
 }
 
 /* Theme selector styles */
+.theme-fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.theme-fieldset legend {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
 .theme-selector {
     display: flex;
     gap: 1rem;

@@ -257,8 +257,9 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="modal-body">
                 <div class="settings-option">
-                    <label>Theme</label>
-                    <div class="theme-selector">
+                    <fieldset class="theme-fieldset">
+                        <legend>Theme</legend>
+                        <div class="theme-selector">
                         <label class="theme-option">
                             <input type="radio" name="theme" value="light" id="lightTheme" checked>
                             <span class="theme-label">
@@ -271,7 +272,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <span class="material-icons-round">dark_mode</span> Dark
                             </span>
                         </label>
-                    </div>
+                        </div>
+                    </fieldset>
                 </div>
                 <div class="settings-option">
                     <label for="providerSelect">AI Provider</label>
