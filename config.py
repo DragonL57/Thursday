@@ -9,29 +9,23 @@ import datetime  # Add datetime import for timestamp functions
 import requests  # Add requests import for HTTP requests
 
 # --- Provider Configuration ---
-API_PROVIDER = 'litellm'  # Set default API provider to litellm since we're removing Pollinations
-DEFAULT_MODEL = 'github/gpt-4o'
+API_PROVIDER = 'litellm'  # Set default API provider to litellm
+DEFAULT_MODEL = 'gemini/gemini-2.0-flash'
 AVAILABLE_MODELS = [
-    'github/gpt-4o',
     'gemini/gemini-2.0-flash'
 ]
 
 # --- Model Configuration ---
-# For LiteLLM provider, use provider/model format (e.g., 'github/gpt-4o', 'gemini/gemini-2.0-flash')
+# For LiteLLM provider, use provider/model format
 MODEL = "gemini/gemini-2.0-flash"  # Default model
 
 # --- Provider-specific Documentation ---
 # LiteLLM models (always in provider/model format):
-#   - 'github/gpt-4o' - GitHub's GPT-4o
 #   - 'gemini/gemini-2.0-flash' - Google's Gemini 2.0 Flash
 
 # --- API Keys (Loaded from .env) ---
 # LiteLLM automatically reads these from environment variables if set
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # For gemini/... models via Google AI Studio
-GITHUB_API_KEY = os.getenv("GITHUB_API_KEY") # For github/... models via GitHub
-# OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # Example if using OpenAI via LiteLLM
-# ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") # Example if using Anthropic via LiteLLM
-# Add other keys as needed for different LiteLLM providers
 
 # The assistants name
 NAME = "Thursday"
@@ -47,7 +41,8 @@ SEED = None
 CLEAR_BEFORE_START = True
 
 # --- Provider fallback settings ---
-ENABLE_PROVIDER_FALLBACK = True  # Enable automatic fallback between providers
+# No fallback needed with only one provider
+ENABLE_PROVIDER_FALLBACK = False
 
 # --- API Request Settings ---
 WEB_REQUEST_TIMEOUT = 60  # API request timeout (seconds)

@@ -44,25 +44,8 @@ export class ImageHandler {
             return null;
         }
         
-        // Get current model information - more robust detection
-        const providerInfo = this._getProviderInfo();
-        console.log(`Formatting image for model: ${providerInfo.model}`);
-        
-        try {
-            // Format based on model type
-            if (providerInfo.model.includes('gemini')) {
-                console.log('Using Gemini image format');
-                return this._formatForGemini(component.currentImageData);
-            } else {
-                // Default to GitHub/standard format for all other models
-                console.log('Using standard image format');
-                return this._formatForStandardLLM(component.currentImageData);
-            }
-        } catch (error) {
-            console.error('Error formatting image data:', error);
-            // Fallback to standard format if there's an error
-            return this._formatForStandardLLM(component.currentImageData);
-        }
+        console.log('Using Gemini image format');
+        return this._formatForGemini(component.currentImageData);
     }
     
     // Show image preview in the UI with improved styling
@@ -201,7 +184,7 @@ export class ImageHandler {
         
         return {
             provider: 'litellm', // Always litellm now
-            model: modelValue || 'github/gpt-4o' // Default to GitHub GPT-4o if not found
+            model: modelValue || 'gemini/gemini-2.0-flash' // Default to Gemini if not found
         };
     }
     
@@ -221,22 +204,5 @@ export class ImageHandler {
         
         // For Gemini, just return the raw base64 data
         return imageData;
-    }
-    
-    _formatForStandardLLM(imageData) {
-        console.log('Using standard LiteLLM format for image (GitHub/GPT)');
-        
-        if (!imageData.startsWith('data:image/')) {
-            console.error('Invalid image format for Standard LLM');
-            return null;
-        }
-        
-        // Standard format for GitHub models
-        return [{
-            type: 'image_url',
-            image_url: {
-                url: imageData
-            }
-        }];
     }
 }

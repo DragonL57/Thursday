@@ -270,123 +270,63 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
 
     # Get the next response after processing all tool calls
     try:
-        # Send temporary info message if callback is provided - commented out to not send to UI
-        # if tool_event_callback:
-        #    for chunk in tool_event_callback("info", "Getting next response after tool execution...", True):
-        #        yield chunk
-        
         # Just log to console instead
         print("Getting next response after tool execution...")
-                
-        # Get next response based on provider
-        if assistant.provider == 'pollinations':
-            if not assistant.api_client:
-                raise ValueError("Pollinations provider selected but api_client is not initialized.")
+        
+        # Use litellm for completion without streaming (for tool processing)
+        import litellm
+        import config as conf
+        
+        # Debug log the messages to understand the current conversation state
+        print(f"Messages before follow-up call (count: {len(assistant.messages)}):")
+        for i, msg in enumerate(assistant.messages[-3:] if len(assistant.messages) > 3 else assistant.messages):
+            # Add safer content handling to prevent None subscript error
+            content = msg.get('content', '')
+            content_preview = str(content)[:50] if content is not None else "None"
+            print(f"  Message {i}: role={msg.get('role')}, content={content_preview}...")
             
-            # Preprocess messages before passing to Pollinations API
-            from assistant.api_client import preprocess_messages_for_pollinations
-            
-            try:
-                next_response = assistant.api_client.get_completion(
-                    messages=assistant.messages,
-                    tools=assistant.tools
-                )
-            except Exception as e:
-                print(f"{Fore.RED}Error making API call to Pollinations: {e}{Style.RESET_ALL}")
-                # Create a minimal error response
-                error_message = f"Error: {str(e)}"
-                next_response = {
-                    "choices": [{
-                        "message": {
-                            "role": "assistant",
-                            "content": f"I apologize, but I encountered an error while processing your request: {error_message}"
-                        }
-                    }]
-                }
-        elif assistant.provider == 'litellm':
-            # Use litellm for completion without streaming (for tool processing)
-            import litellm
-            import config as conf
-            
-            # Debug log the messages to understand the current conversation state
-            print(f"Messages before follow-up call (count: {len(assistant.messages)}):")
-            for i, msg in enumerate(assistant.messages[-3:] if len(assistant.messages) > 3 else assistant.messages):
-                # Add safer content handling to prevent None subscript error
-                content = msg.get('content', '')
-                content_preview = str(content)[:50] if content is not None else "None"
-                print(f"  Message {i}: role={msg.get('role')}, content={content_preview}...")
-                
-                if msg.get('role') == 'tool' and 'tool_call_id' in msg:
-                    # Also handle potential None content in tool results
-                    tool_content = msg.get('content', '')
-                    tool_preview = str(tool_content)[:50] if tool_content is not None else "None" 
-                    print(f"    Tool result for call {msg.get('tool_call_id')}: {tool_preview}...")
+            if msg.get('role') == 'tool' and 'tool_call_id' in msg:
+                # Also handle potential None content in tool results
+                tool_content = msg.get('content', '')
+                tool_preview = str(tool_content)[:50] if tool_content is not None else "None" 
+                print(f"    Tool result for call {msg.get('tool_call_id')}: {tool_preview}...")
 
-            # Process messages to ensure proper format for Gemini vision models
-            processed_messages = preprocess_messages_for_litellm(assistant.messages, assistant.model)
+        # Process messages to ensure proper format for Gemini vision models
+        processed_messages = preprocess_messages_for_litellm(assistant.messages, assistant.model)
+        
+        completion_args = {
+            "model": assistant.model,
+            "messages": processed_messages,  # Use processed messages
+            "tools": assistant.tools,
+            "temperature": conf.TEMPERATURE,
+            "top_p": conf.TOP_P,
+            "max_tokens": conf.MAX_TOKENS,
+            "seed": conf.SEED,
+            "tool_choice": "auto",  # This is important to enable tool selection
+        }
+        safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
+        if safety_settings:
+            completion_args["safety_settings"] = safety_settings
             
-            completion_args = {
-                "model": assistant.model,
-                "messages": processed_messages,  # Use processed messages
-                "tools": assistant.tools,
-                "temperature": conf.TEMPERATURE,
-                "top_p": conf.TOP_P,
-                "max_tokens": conf.MAX_TOKENS,
-                "seed": conf.SEED,
-                "tool_choice": "auto",  # This is important to enable tool selection
-            }
-            safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
-            if safety_settings:
-                completion_args["safety_settings"] = safety_settings
-                
-            completion_args = {k: v for k, v in completion_args.items() if v is not None}
+        completion_args = {k: v for k, v in completion_args.items() if v is not None}
+        
+        print(f"Making follow-up LiteLLM API call with model: {assistant.model}")
+        try:
+            next_response = litellm.completion(**completion_args)
+            print(f"Follow-up API call successful. Response type: {type(next_response)}")
             
-            print(f"Making follow-up LiteLLM API call with model: {assistant.model}")
-            try:
-                next_response = litellm.completion(**completion_args)
-                print(f"Follow-up API call successful. Response type: {type(next_response)}")
-                
-                # Debug the response content - make this more robust with defensive checks
-                if isinstance(next_response, dict) and "choices" in next_response and next_response["choices"]:
-                    message = next_response["choices"][0].get("message", {})
-                    content = message.get("content", "")
-                    tool_calls = message.get("tool_calls")
-                    print(f"Follow-up response content: {content[:100]}...")
-                    print(f"Follow-up response has {len(tool_calls) if tool_calls else 0} tool calls")
-                else:
-                    # Handle different response formats from different LiteLLM backend providers
-                    # For some providers, the response might be a custom object, not a dict
-                    try:
-                        # Check if response has a structured format we can navigate
-                        if hasattr(next_response, 'choices') and next_response.choices:
-                            # Try to get content from the structured response
-                            message = getattr(next_response.choices[0], 'message', None)
-                            if message:
-                                content = getattr(message, 'content', '')
-                                tool_calls = getattr(message, 'tool_calls', [])
-                                print(f"Follow-up response (object format) content: {content[:100] if content else ''}...")
-                                print(f"Follow-up response has {len(tool_calls) if tool_calls else 0} tool calls")
-                            else:
-                                print("Follow-up response message attribute is not accessible")
-                        else:
-                            print(f"Follow-up response has non-standard format: {type(next_response)}")
-                    except Exception as format_error:
-                        print(f"Error parsing response format: {format_error}")
-                    
-                    print(f"WARNING: Follow-up response format: {type(next_response)}")
-                    # Try to dump some useful info about the response for debugging
-                    try:
-                        if hasattr(next_response, '__dict__'):
-                            print(f"Response attributes: {list(next_response.__dict__.keys())}")
-                        else:
-                            print(f"Response repr: {repr(next_response)[:200]}...")
-                    except:
-                        print("Could not extract additional response details")
-            except Exception as e:
-                print(f"Error during follow-up LiteLLM API call: {e}")
-                raise
-        else:
-            raise ValueError(f"Unsupported provider: {assistant.provider}")
+            # Debug the response content - make this more robust with defensive checks
+            if isinstance(next_response, dict) and "choices" in next_response and next_response["choices"]:
+                message = next_response["choices"][0].get("message", {})
+                content = message.get("content", "")
+                tool_calls = message.get("tool_calls")
+                print(f"Follow-up response content: {content[:100]}...")
+                print(f"Follow-up response has {len(tool_calls) if tool_calls else 0} tool calls")
+            else:
+                print(f"WARNING: Follow-up response format: {type(next_response)}")
+        except Exception as e:
+            print(f"Error during follow-up LiteLLM API call: {e}")
+            raise
         
         # Process the new response recursively, incrementing the recursion depth
         next_generator = process_tool_calls(

@@ -5,7 +5,7 @@ export class ModelSelector {
         this.dropdownContent = null;
         this.currentModelName = null;
         this.isInitialized = false;
-        this.currentModel = 'github/gpt-4o'; // Default model
+        this.currentModel = 'gemini/gemini-2.0-flash'; // Default model
         
         // Create the dropdown elements
         this.createDropdown();
@@ -24,11 +24,11 @@ export class ModelSelector {
         button.type = 'button';
         button.className = 'model-selector-button';
         
-        // Create the model name span with default GitHub GPT-4o
+        // Create the model name span with default Gemini 2.0 Flash
         this.currentModelName = document.createElement('span');
         this.currentModelName.className = 'current-model-name';
-        this.currentModelName.textContent = 'GitHub: GPT-4o';
-        this.currentModelName.title = 'GitHub GPT-4o';
+        this.currentModelName.textContent = 'Gemini 2.0 Flash';
+        this.currentModelName.title = 'Gemini 2.0 Flash';
         
         // Create the dropdown icon
         const icon = document.createElement('span');
@@ -66,45 +66,29 @@ export class ModelSelector {
             console.log('Settings loaded:', settings);
             
             if (settings && settings.model) {
-                // Handle migration from legacy models
-                if (settings.model === 'gpt4o-integrated' || settings.model === 'openai-large') {
-                    this.currentModel = 'github/gpt-4o';
-                    console.log('Migrating from legacy model to:', this.currentModel);
-                    
-                    // Update the settings silently
-                    await this.settingsManager.updateModelSilently({
-                        provider: 'litellm',
-                        model: 'github/gpt-4o'
-                    });
-                } else {
-                    this.currentModel = settings.model;
-                    console.log('Current model set to:', this.currentModel);
-                }
+                this.currentModel = settings.model;
+                console.log('Current model set to:', this.currentModel);
             } else {
                 console.log('No model found in settings, using default');
-                this.currentModel = 'github/gpt-4o';
+                this.currentModel = 'gemini/gemini-2.0-flash';
             }
             
             // Update the current model name
             this.updateCurrentModelDisplay();
             
-            // Add the two supported models directly
+            // Clear dropdown content
             this.dropdownContent.innerHTML = '';
             
-            // Add GitHub GPT-4o
-            this.addModelOption('github/gpt-4o', 'GitHub: GPT-4o', 'litellm');
-            
-            // Add Gemini 2.0 Flash
+            // Add only Gemini 2.0 Flash
             this.addModelOption('gemini/gemini-2.0-flash', 'Gemini 2.0 Flash', 'litellm');
             
             this.isInitialized = true;
-            console.log('Model selector initialized with 2 options');
+            console.log('Model selector initialized with Gemini option');
             
         } catch (error) {
             console.error('Error loading models:', error);
-            // Even if there's an error, still create the dropdown options
+            // Even if there's an error, still create the dropdown option
             this.dropdownContent.innerHTML = '';
-            this.addModelOption('github/gpt-4o', 'GitHub: GPT-4o', 'litellm');
             this.addModelOption('gemini/gemini-2.0-flash', 'Gemini 2.0 Flash', 'litellm');
             this.isInitialized = true;
         }
@@ -130,29 +114,19 @@ export class ModelSelector {
     
     // Get a cleaned display name for the model
     getDisplayName(fullName) {
-        // First remove provider prefix if present (e.g., "LiteLLM: Gemini 2.0 Flash" -> "Gemini 2.0 Flash")
-        const withoutProvider = fullName.replace(/^(LiteLLM|Pollinations):\s*/, '');
-        
-        // Format GitHub models nicely
-        if (withoutProvider.toLowerCase().includes('github')) {
-            // Transform "GitHub GPT-4o" to "GitHub: GPT-4o"
-            return withoutProvider.replace(/github(\s*)(\/)?\s*(.+)/i, 'GitHub: $3');
-        }
-        
+        // Remove provider prefix if present
+        const withoutProvider = fullName.replace(/^LiteLLM:\s*/, '');
         return withoutProvider;
     }
     
     updateCurrentModelDisplay() {
         if (!this.currentModel) {
-            this.currentModelName.textContent = 'GitHub: GPT-4o';
+            this.currentModelName.textContent = 'Gemini 2.0 Flash';
             return;
         }
         
         // Directly map the known model values to display names
-        if (this.currentModel === 'github/gpt-4o') {
-            this.currentModelName.textContent = 'GitHub: GPT-4o';
-            this.currentModelName.title = 'GitHub GPT-4o';
-        } else if (this.currentModel === 'gemini/gemini-2.0-flash') {
+        if (this.currentModel === 'gemini/gemini-2.0-flash') {
             this.currentModelName.textContent = 'Gemini 2.0 Flash';
             this.currentModelName.title = 'Gemini 2.0 Flash';
         } else {
