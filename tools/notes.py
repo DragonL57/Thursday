@@ -34,7 +34,7 @@ def _reset_notes_if_new_message(message_id=None):
     
     return False
 
-def add_note(content: str, topic: str = None, section: str = None, append: bool = False, message_id: str = None) -> str:
+def add_note(content: str, topic: str = None, section: str = None, append: bool = True, message_id: str = None) -> str:
     """
     Add or create a note with structured content to build comprehensive responses.
     
@@ -135,7 +135,7 @@ def add_note(content: str, topic: str = None, section: str = None, append: bool 
         content: The content to store in the note (be extremely detailed and comprehensive)
         topic: Topic/category for the note (e.g., "Research Plan", "Source: Website Title", "Technical Analysis")
         section: Optional section name within the note (e.g., "Key Findings", "Methodology", "Examples") 
-        append: Whether to append to an existing note with the same topic (default: False)
+        append: Whether to append to an existing note with the same topic (default: True)
         message_id: Internal parameter to track conversation state (don't use manually)
         
     Returns:
@@ -155,7 +155,7 @@ def add_note(content: str, topic: str = None, section: str = None, append: bool 
     timestamp = datetime.now().isoformat()
     
     # Check if we should append to an existing note
-    if append and topic:
+    if topic:
         existing_notes = [note for note in _notes_storage if note["topic"] == topic]
         if existing_notes:
             existing_note = existing_notes[0]  # Use the first matching note
@@ -166,6 +166,11 @@ def add_note(content: str, topic: str = None, section: str = None, append: bool 
                     existing_note["sections"][section] += f"\n\n{content}"
                 else:
                     existing_note["sections"][section] = content
+            elif section:
+                # Create sections dict if it doesn't exist
+                if "sections" not in existing_note:
+                    existing_note["sections"] = {}
+                existing_note["sections"][section] = content
             else:
                 # Append to main content
                 existing_note["content"] += f"\n\n{content}"
