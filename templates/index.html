@@ -276,21 +276,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     </fieldset>
                 </div>
                 <div class="settings-option">
-                    <label for="providerSelect">AI Provider</label>
-                    <select id="providerSelect">
-                        <option value="pollinations">Pollinations AI</option>
-                        <option value="litellm">LiteLLM</option>
-                    </select>
-                </div>
-                <div class="settings-option">
-                    <label for="modelSelect">Model</label>
-                    <select id="modelSelect">
-                        <!-- Replace integrated GPT-4o with separate provider options -->
-                        <option value="openai-large" data-provider="pollinations">Pollinations: GPT-4o</option>
-                        <option value="github/gpt-4o" data-provider="litellm">GitHub: GPT-4o</option>
-                        <!-- Keep Gemini as an alternative option -->
-                        <option value="gemini/gemini-2.0-flash" data-provider="litellm">LiteLLM: Gemini 2.0 Flash</option>
-                    </select>
+                    <!-- Replace provider selection dropdown -->
+                    <div class="selector-container">
+                        <label for="modelSelect">Model:</label>
+                        <select id="modelSelect" class="form-select">
+                            <option value="github/gpt-4o">GPT-4o</option>
+                            <option value="gemini/gemini-2.0-flash">Gemini 2.0 Flash</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="settings-option">
                     <label for="temperatureSlider">Temperature</label>

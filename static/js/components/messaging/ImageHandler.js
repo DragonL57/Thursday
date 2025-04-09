@@ -44,25 +44,24 @@ export class ImageHandler {
             return null;
         }
         
-        // Get current provider and model information
+        // Get current model information - more robust detection
         const providerInfo = this._getProviderInfo();
-        console.log(`Formatting image for provider: ${providerInfo.provider}, model: ${providerInfo.model}`);
+        console.log(`Formatting image for model: ${providerInfo.model}`);
         
-        // Format based on provider and model
-        if (providerInfo.provider === 'pollinations') {
-            // Pollinations format - send base64 directly
-            return component.currentImageData;
-        } else {
-            // For LiteLLM providers
+        try {
+            // Format based on model type
             if (providerInfo.model.includes('gemini')) {
+                console.log('Using Gemini image format');
                 return this._formatForGemini(component.currentImageData);
-            } else if (providerInfo.model.includes('github')) {
-                // GitHub models need image data as a URL, not base64
-                return this._formatForGitHub(component.currentImageData);
             } else {
-                // Default format for other LiteLLM models
+                // Default to GitHub/standard format for all other models
+                console.log('Using standard image format');
                 return this._formatForStandardLLM(component.currentImageData);
             }
+        } catch (error) {
+            console.error('Error formatting image data:', error);
+            // Fallback to standard format if there's an error
+            return this._formatForStandardLLM(component.currentImageData);
         }
     }
     
@@ -193,69 +192,46 @@ export class ImageHandler {
     }
     
     _getProviderInfo() {
-        const providerSelect = document.getElementById('providerSelect');
+        // More robust model detection by checking both the dropdown and the select element
         const modelSelect = document.getElementById('modelSelect');
+        const modelSelectorValue = this._getModelSelectorValue();
+        
+        // First try the model selector value, then fall back to the select element
+        const modelValue = modelSelectorValue || (modelSelect ? modelSelect.value : null);
         
         return {
-            provider: providerSelect ? providerSelect.value : 'pollinations',
-            model: modelSelect ? modelSelect.value : ''
+            provider: 'litellm', // Always litellm now
+            model: modelValue || 'github/gpt-4o' // Default to GitHub GPT-4o if not found
         };
+    }
+    
+    // Get the selected model from the UI dropdown
+    _getModelSelectorValue() {
+        const activeOption = document.querySelector('.model-option.active');
+        return activeOption ? activeOption.dataset.value : null;
     }
     
     _formatForGemini(imageData) {
         console.log('Using Gemini-specific format for image');
         
-        try {
-            // Validate the image data format
-            if (!imageData.startsWith('data:image/')) {
-                console.error('Invalid image format for Gemini');
-                return null;
-            }
-            
-            // Check image size limitation
-            const approximateSizeInMB = (imageData.length * 0.75) / (1024 * 1024);
-            console.log(`Approximate image size: ${approximateSizeInMB.toFixed(2)} MB`);
-            
-            if (approximateSizeInMB > 10) {
-                console.warn('Image may be too large for Gemini API');
-            }
-            
-            // For Gemini, we just need the raw data URL - the backend will handle formatting
-            return imageData;
-            
-        } catch (error) {
-            console.error('Error formatting image for Gemini:', error);
+        if (!imageData.startsWith('data:image/')) {
+            console.error('Invalid image format for Gemini');
             return null;
         }
-    }
-    
-    // New method specifically for GitHub models
-    _formatForGitHub(imageData) {
-        console.log('Using GitHub-specific format for image');
         
-        try {
-            // Validate the image data format
-            if (!imageData.startsWith('data:image/')) {
-                console.error('Invalid image format for GitHub model');
-                return null;
-            }
-            
-            // GitHub API seems to require public URLs, not base64
-            // For now, we'll send only the base64 and let the backend
-            // handle the conversion or error gracefully
-            console.log('Sending base64 image to backend for GitHub model processing');
-            
-            // Just return the raw image data and let backend handle it
-            return imageData;
-        } catch (error) {
-            console.error('Error formatting image for GitHub:', error);
-            return null;
-        }
+        // For Gemini, just return the raw base64 data
+        return imageData;
     }
     
     _formatForStandardLLM(imageData) {
-        console.log('Using standard LiteLLM format for image');
+        console.log('Using standard LiteLLM format for image (GitHub/GPT)');
         
+        if (!imageData.startsWith('data:image/')) {
+            console.error('Invalid image format for Standard LLM');
+            return null;
+        }
+        
+        // Standard format for GitHub models
         return [{
             type: 'image_url',
             image_url: {

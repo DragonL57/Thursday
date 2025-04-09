@@ -141,6 +141,9 @@ export class MessagingComponent {
         let formattedImageData = null;
         if (hasImage) {
             formattedImageData = this.formatImageDataForProvider(imageDataToSend);
+            
+            // Add debugging info
+            this.logImageProcessing(imageDataToSend, formattedImageData);
         }
         
         try {
@@ -427,28 +430,19 @@ export class MessagingComponent {
     formatImageDataForProvider(imageData) {
         if (!imageData) return null;
         
-        // Get current provider and model information
-        const providerSelect = document.getElementById('providerSelect');
-        const modelSelect = document.getElementById('modelSelect');
-        const provider = providerSelect ? providerSelect.value : 'pollinations';
-        const model = modelSelect ? modelSelect.value : '';
-        
-        // Format based on provider and model
-        if (provider === 'pollinations') {
-            return imageData;
-        } else if (model.includes('gemini')) {
-            return imageData;
-        } else if (model.includes('github')) {
-            // Let the backend know this is for GitHub
-            console.log('GitHub model detected, sending image for backend processing');
-            return imageData;
-        } else {
-            return [{
-                type: 'image_url',
-                image_url: {
-                    url: imageData
-                }
-            }];
+        // Delegate to the image handler which now has improved model detection
+        return this.imageHandler.getFormattedImageData();
+    }
+    
+    // Add a new debugging method
+    logImageProcessing(imageData, formattedData) {
+        console.log('Image processing debug:');
+        console.log('- Has image data:', !!imageData);
+        console.log('- Image data type:', typeof imageData);
+        if (typeof imageData === 'string') {
+            console.log('- Image data prefix:', imageData.substring(0, 30) + '...');
         }
+        console.log('- Formatted data:', formattedData ? 'Present' : 'None');
+        console.log('- Formatted data type:', formattedData ? (Array.isArray(formattedData) ? 'Array' : typeof formattedData) : 'N/A');
     }
 }

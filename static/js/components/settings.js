@@ -9,7 +9,6 @@ export class SettingsManager {
         this.temperatureSlider = elements.temperatureSlider;
         this.temperatureValue = elements.temperatureValue;
         this.maxTokensInput = elements.maxTokensInput;
-        this.providerSelect = elements.providerSelect;
         this.modelSelect = elements.modelSelect;
         this.saveChatHistory = elements.saveChatHistory;
         this.messagingComponent = messagingComponent;
@@ -20,7 +19,7 @@ export class SettingsManager {
     }
     
     init() {
-        // Open settings modal - only if settingsButton exists
+        // Open settings modal
         if (this.settingsButton) {
             this.settingsButton.addEventListener('click', () => {
                 if (this.settingsModal) {
@@ -46,13 +45,6 @@ export class SettingsManager {
                 this.temperatureValue.textContent = this.temperatureSlider.value;
             });
         }
-        
-        // Handle provider selection change
-        if (this.providerSelect) {
-            this.providerSelect.addEventListener('change', () => {
-                this.updateModelOptions();
-            });
-        }
 
         // Save settings
         if (this.saveSettingsButton) {
@@ -65,71 +57,62 @@ export class SettingsManager {
             });
         }
     }
-    
-    updateModelOptions() {
-        const selectedProvider = this.providerSelect.value;
-        const options = Array.from(this.modelSelect.options);
-        
-        // Show only models for selected provider
-        options.forEach(option => {
-            if (option.dataset.provider === selectedProvider) {
-                option.style.display = '';
-            } else {
-                option.style.display = 'none';
-            }
-        });
-        
-        // Select first available model for provider
-        const firstAvailableOption = options.find(option => 
-            option.dataset.provider === selectedProvider && option.style.display !== 'none'
-        );
-        if (firstAvailableOption) {
-            this.modelSelect.value = firstAvailableOption.value;
-        }
-    }
 
     async fetchCurrentSettings() {
         try {
             const settings = await getSettings();
             
-            // Update UI with current settings
-            if (settings.provider) {
-                this.providerSelect.value = settings.provider;
-                this.updateModelOptions();
+            // Ensure we get a valid object back
+            if (!settings) {
+                throw new Error('Invalid settings returned from API');
             }
-
-            if (settings.model) {
-                // Only set model if it's available for current provider
-                const modelOption = Array.from(this.modelSelect.options)
-                    .find(option => option.value === settings.model && 
-                                  option.dataset.provider === settings.provider);
-                if (modelOption) {
+            
+            // Update model select
+            if (settings.model && this.modelSelect) {
+                // Make sure the option exists in the select element
+                let optionExists = false;
+                Array.from(this.modelSelect.options).forEach(option => {
+                    if (option.value === settings.model) {
+                        optionExists = true;
+                    }
+                });
+                
+                if (optionExists) {
                     this.modelSelect.value = settings.model;
+                } else {
+                    console.warn(`Model ${settings.model} not found in select options`);
+                    // Set to default if the option doesn't exist
+                    this.modelSelect.value = 'github/gpt-4o';
                 }
             }
             
-            if (settings.temperature !== undefined) {
-                // Ensure the temperature is properly formatted
+            // Update temperature
+            if (settings.temperature !== undefined && this.temperatureSlider && this.temperatureValue) {
                 const tempValue = parseFloat(settings.temperature);
                 this.temperatureSlider.value = tempValue;
                 this.temperatureValue.textContent = tempValue;
-                
-                // Log to confirm we're getting the right value
-                console.log('Server temperature setting:', tempValue);
             }
             
-            if (settings.max_tokens !== undefined) {
+            // Update max tokens
+            if (settings.max_tokens !== undefined && this.maxTokensInput) {
                 this.maxTokensInput.value = settings.max_tokens;
-                console.log('Server max_tokens setting:', settings.max_tokens);
             }
             
-            if (settings.save_history !== undefined) {
+            // Update save history checkbox
+            if (settings.save_history !== undefined && this.saveChatHistory) {
                 this.saveChatHistory.checked = settings.save_history;
             }
             
-            console.log('Loaded server settings:', settings);
+            return settings;
         } catch (error) {
             console.error('Error fetching settings:', error);
+            return {
+                provider: 'litellm',
+                model: 'github/gpt-4o',
+                temperature: 1,
+                max_tokens: 8192,
+                save_history: true
+            };
         }
     }
     
@@ -137,7 +120,7 @@ export class SettingsManager {
         try {
             // Only update necessary fields
             const update = {
-                provider: settings.provider,
+                provider: 'litellm', // Always set to litellm
                 model: settings.model
             };
             
@@ -157,13 +140,8 @@ export class SettingsManager {
             // Update settings via API
             await updateSettings(update);
             
-            // Update the UI to reflect the change
-            if (settings.provider && this.providerSelect) {
-                this.providerSelect.value = settings.provider;
-            }
-            
+            // Update the select element if it exists and the option is available
             if (settings.model && this.modelSelect) {
-                // Update the model select if the option exists
                 const modelOption = Array.from(this.modelSelect.options)
                     .find(option => option.value === settings.model);
                     
@@ -180,8 +158,15 @@ export class SettingsManager {
     }
     
     async saveSettings() {
+        // Ensure we have the model select element
+        if (!this.modelSelect) {
+            console.error('Model select element not found');
+            alert('Settings could not be saved: model selection not available');
+            return;
+        }
+
         const settings = {
-            provider: this.providerSelect.value,
+            provider: 'litellm', // Always set to litellm
             model: this.modelSelect.value,
             temperature: parseFloat(this.temperatureSlider.value),
             max_tokens: parseInt(this.maxTokensInput.value),
@@ -191,7 +176,7 @@ export class SettingsManager {
         try {
             await updateSettings(settings);
             this.settingsModal.classList.remove('active');
-            // Remove toast notification - just close the modal silently
+            console.log('Settings saved successfully');
         } catch (error) {
             console.error('Error saving settings:', error);
             alert('Failed to update settings. Please try again.');

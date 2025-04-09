@@ -9,18 +9,18 @@ import datetime  # Add datetime import for timestamp functions
 import requests  # Add requests import for HTTP requests
 
 # --- Provider Configuration ---
-API_PROVIDER = "litellm"  # Options: "pollinations" or "litellm"
+API_PROVIDER = 'litellm'  # Set default API provider to litellm since we're removing Pollinations
+DEFAULT_MODEL = 'github/gpt-4o'
+AVAILABLE_MODELS = [
+    'github/gpt-4o',
+    'gemini/gemini-2.0-flash'
+]
 
 # --- Model Configuration ---
-# For Pollinations AI, use 'openai-large' directly (not 'openai')
 # For LiteLLM provider, use provider/model format (e.g., 'github/gpt-4o', 'gemini/gemini-2.0-flash')
-MODEL = "gemini/gemini-2.0-flash"  # Default model for Pollinations API
+MODEL = "gemini/gemini-2.0-flash"  # Default model
 
 # --- Provider-specific Documentation ---
-# Pollinations API models:
-#   - 'openai-large' - GPT-4o with image capabilities
-#   - Do NOT use 'openai' - this causes API errors with Pollinations
-# 
 # LiteLLM models (always in provider/model format):
 #   - 'github/gpt-4o' - GitHub's GPT-4o
 #   - 'gemini/gemini-2.0-flash' - Google's Gemini 2.0 Flash
@@ -163,7 +163,7 @@ def get_core_system_prompt():
             <workflow>
                 <phases>
                     <planning>First create a note with your approach plan</planning>
-                    <collection>Create detailed notes for each source or tool result. Capture URLs, titles, summaries, key quotes, and the tool used.</collection>
+                    <collection>Create detailed notes for each source or tool result. Capture URLs, titles, summaries, key quotes, metrics, code examples, etc.
                     <analysis>Consolidate, compare, and organize information across different notes. Identify key themes and discrepancies.</analysis>
                     <formulation>Use `get_notes` to retrieve your structured findings. Synthesize the information from notes into a comprehensive answer, ensuring all web-sourced claims are cited.</formulation>
                 </phases>

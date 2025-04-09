@@ -15,8 +15,8 @@ from rich.markdown import Markdown
 from pydantic import BaseModel
 
 import config as conf
-from .api_client import ApiClient, preprocess_messages_for_litellm, preprocess_messages_for_pollinations
-from .image_processor import optimize_images
+from .api_client import preprocess_messages_for_litellm
+from .image_processor import optimize_images, process_image_for_gemini, process_image_for_github
 from .streaming import StreamHandler
 from .tool_handler import process_tool_calls, convert_to_pydantic_model
 from .utils import cmd
@@ -26,7 +26,7 @@ from utils.provider_manager import ProviderManager
 
 class Assistant:
     """
-    Assistant class that handles interactions with the Pollinations API.
+    Assistant class that handles interactions with the LiteLLM.
     Includes support for:
     - Message sending and receiving
     - Tool/function calling
@@ -82,50 +82,22 @@ class Assistant:
         self._processing_thread = None
         self._final_response = None
 
-        # Handle specific model providers
-        if model == "pollinations-gpt4o":
+        # Handle specific model providers - all now map to LiteLLM
+        if model == "pollinations-gpt4o" or model == "github-gpt4o" or model == "gpt4o-integrated":
+            if model == "gpt4o-integrated":
+                print("Warning: Using legacy gpt4o-integrated model name. Please update to 'github-gpt4o'.")
             # Initialize provider manager
             ProviderManager.initialize()
-            # Get appropriate provider and model
-            provider, actual_model = ProviderManager.get_provider_and_model('pollinations-gpt4o')
-            self.provider = provider
-            self.model = actual_model
-        elif model == "github-gpt4o":
-            # Initialize provider manager
-            ProviderManager.initialize()
-            # Get appropriate provider and model
-            provider, actual_model = ProviderManager.get_provider_and_model('github-gpt4o')
-            self.provider = provider
-            self.model = actual_model
-        elif model == "gpt4o-integrated":
-            # Legacy model name - use pollinations as default for migrating users
-            print("Warning: Using legacy gpt4o-integrated model name. Please update to either 'pollinations-gpt4o' or 'github-gpt4o'.")
-            ProviderManager.initialize()
-            provider, actual_model = ProviderManager.get_provider_and_model('pollinations-gpt4o')
-            self.provider = provider
-            self.model = actual_model
+            # Get appropriate provider and model - always LiteLLM now
+            self.provider = 'litellm'
+            self.model = 'github/gpt-4o'
         else:
-            # Determine if this is a litellm model (contains a slash)
-            if "/" in model:
-                self.provider = 'litellm'
-                self.model = model
-            else:
-                # Use standard provider selection
-                self.provider = getattr(conf, 'API_PROVIDER', 'pollinations')
-                self.model = model
+            # All models use LiteLLM now
+            self.provider = 'litellm'
+            self.model = model if "/" in model else f"github/{model}"  # Default to GitHub provider if no provider specified
         
-        # Initialize API client if using Pollinations
-        if self.provider == 'pollinations':
-            self.api_client = ApiClient(
-                base_url="https://text.pollinations.ai/openai",
-                model=self.model,
-                retry_count=getattr(conf, 'API_RETRY_COUNT', 3),
-                base_delay=getattr(conf, 'API_BASE_DELAY', 1.0),
-                max_delay=getattr(conf, 'API_MAX_DELAY', 10.0),
-                request_timeout=conf.WEB_REQUEST_TIMEOUT
-            )
-        else:
-            self.api_client = None  # Not needed for litellm
+        # No need for Pollinations API client
+        self.api_client = None
         
         # Initialize streaming handler
         self.stream_handler = StreamHandler(self)
@@ -191,14 +163,7 @@ class Assistant:
         """Process the message and execute tools."""
         try:
             # Get completion based on provider
-            if self.provider == 'pollinations':
-                if not self.api_client:
-                    raise ValueError("Pollinations provider selected but api_client is not initialized.")
-                response = self.api_client.get_completion(
-                    messages=self.messages,
-                    tools=self.tools
-                )
-            elif self.provider == 'litellm':
+            if self.provider == 'litellm':
                 # Special handling for GitHub models to ensure the API key is set
                 if self.model.startswith('github/') and not os.environ.get('GITHUB_API_KEY'):
                     # Try to get it from config if it exists
@@ -252,9 +217,19 @@ class Assistant:
         self.current_tool_calls = []
         self.image_data = []
         
-        # If images are provided, optimize and store them
+        # Process images based on the model type
         if images:
-            self.image_data = optimize_images(images)
+            print(f"{Fore.CYAN}Processing images for model: {self.model}{Style.RESET_ALL}")
+            
+            # Process images differently based on model
+            if self.model.startswith('gemini/'):
+                # Gemini needs specific image formatting
+                self.image_data = process_image_for_gemini(images)
+                print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESET_ALL}")
+            else:
+                # GitHub and other models use standard format
+                self.image_data = process_image_for_github(images)
+                print(f"{Fore.GREEN}Processed images for GitHub/standard model{Style.RESET_ALL}")
         
         # Prepare the content array if images are present
         if self.image_data:
@@ -266,32 +241,14 @@ class Assistant:
             # Add simple text message
             self.messages.append({"role": "user", "content": message})
             
-        # Get completion using either Pollinations API or litellm
-        if getattr(conf, 'API_PROVIDER', 'pollinations') == 'pollinations':
-            try:
-                # Import the proper preprocessing function
-                from assistant.api_client import preprocess_messages_for_pollinations
-                
-                # Make sure the API client is initialized
-                if not self.api_client:
-                    from assistant.api_client import ApiClient
-                    self.api_client = ApiClient()
-                
-                response = self.api_client.get_completion(
-                    messages=self.messages,
-                    tools=self.tools
-                )
-            except Exception as e:
-                print(f"Error in Pollinations API call: {e}")
-                # Return an error response
-                return {
-                    "text": f"Sorry, I encountered an error while processing your request: {str(e)}",
-                    "tool_calls": self.current_tool_calls
-                }
-        else:
+        # All requests now use LiteLLM
+        try:
+            # Preprocess messages if needed for certain model types
+            processed_messages = preprocess_messages_for_litellm(self.messages, self.model)
+            
             response = litellm.completion(
                 model=self.model,
-                messages=self.messages,
+                messages=processed_messages,
                 tools=self.tools,
                 temperature=conf.TEMPERATURE,
                 top_p=conf.TOP_P,
@@ -299,6 +256,13 @@ class Assistant:
                 seed=conf.SEED,
                 safety_settings=conf.SAFETY_SETTINGS
             )
+        except Exception as e:
+            print(f"Error in API call: {e}")
+            # Return an error response
+            return {
+                "text": f"Sorry, I encountered an error while processing your request: {str(e)}",
+                "tool_calls": self.current_tool_calls
+            }
         
         # Process the response and return both text and tool calls
         result = process_tool_calls(self, response)
@@ -313,39 +277,27 @@ class Assistant:
     def update_provider(self, provider: str, model: str = None):
         """
         Update the provider and model, reinitializing client if needed.
+        Note: We only support LiteLLM now, but keeping this method for compatibility.
         
         Args:
-            provider: The provider to use ('pollinations' or 'litellm')
+            provider: The provider to use (only 'litellm' is supported)
             model: Optional new model name to use
         """
         updated = False
         
-        # Update provider if changed
-        if self.provider != provider:
-            self.provider = provider
+        # Always use LiteLLM, ignore provider parameter
+        if self.provider != 'litellm':
+            self.provider = 'litellm'
             updated = True
         
         # Update model if provided
         if model is not None and self.model != model:
             self.model = model
             updated = True
-            
-        # Only reinitialize if something changed
+        
+        # Reinitialize if needed
         if updated:
-            # Initialize API client for Pollinations or clean up for other providers
-            if self.provider == 'pollinations':
-                self.api_client = ApiClient(
-                    base_url="https://text.pollinations.ai/openai",
-                    model=self.model,
-                    retry_count=getattr(conf, 'API_RETRY_COUNT', 3),
-                    base_delay=getattr(conf, 'API_BASE_DELAY', 1.0),
-                    max_delay=getattr(conf, 'API_MAX_DELAY', 10.0),
-                    request_timeout=conf.WEB_REQUEST_TIMEOUT
-                )
-            else:
-                self.api_client = None
-                
-            print(f"Assistant provider updated to: {self.provider} with model: {self.model}")
+            pass
 
     def print_ai(self, msg: str):
         """Print a formatted assistant message to the console."""
@@ -454,4 +406,22 @@ class Assistant:
         """
         Send a message and stream the response with callback for each chunk.
         """
-        return self.stream_handler.stream_send_message(message, images, callback)
+        # Process images based on the model type
+        if images:
+            print(f"{Fore.CYAN}Processing images for model (streaming): {self.model}{Style.RESET_ALL}")
+            
+            # Process images differently based on model
+            if self.model.startswith('gemini/'):
+                # Gemini needs specific image formatting
+                processed_images = process_image_for_gemini(images)
+                print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESET_ALL}")
+            else:
+                # GitHub and other models use standard format
+                processed_images = process_image_for_github(images)
+                print(f"{Fore.GREEN}Processed images for GitHub/standard model{Style.RESET_ALL}")
+            
+            # Pass the processed images to the stream handler
+            return self.stream_handler.stream_send_message(message, processed_images, callback)
+        else:
+            # No images, just pass the message
+            return self.stream_handler.stream_send_message(message, None, callback)
