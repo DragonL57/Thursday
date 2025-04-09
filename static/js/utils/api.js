@@ -138,7 +138,7 @@ export function abortCurrentRequest() {
  * @param {Function} callbacks.onRecursionDepth - Called when recursion depth event is received
  * @returns {Promise<void>}
  */
-export async function streamChatMessage(message, imageData = null, callbacks = {}) {
+export async function streamChatMessage(message, imageData = null, callbacks = {}, isRetry = false) { // Added isRetry parameter
     const { onToken, onToolCall, onToolUpdate, onFinalResponse, onInfo, onError, onDone, onRecursionDepth } = callbacks;
     
     // Create a new AbortController for this request
@@ -162,8 +162,8 @@ export async function streamChatMessage(message, imageData = null, callbacks = {
     let finalResponseSent = false;
     
     try {
-        // Construct request payload with or without image
-        const payload = { message };
+        // Construct request payload with or without image and retry flag
+        const payload = { message, is_retry: isRetry }; // Changed key to is_retry for Python convention
         if (imageData) {
             payload.imageData = imageData;
         }

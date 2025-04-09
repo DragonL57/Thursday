@@ -482,8 +482,8 @@ export class MessageRenderer {
                     // Add a temporary loading message
                     this.messagingComponent.addInfoMessage('Regenerating response...', true);
                     
-                    // Pass true as the third parameter to skip adding a new user message
-                    await this.messagingComponent.sendMessage(content, imageData, true);
+                    // Pass true as the third parameter (skipUserMessage) AND fourth parameter (isRetry)
+                    await this.messagingComponent.sendMessage(content, imageData, true, true);
                     
                     // Clear the temporary message
                     this.messagingComponent.clearTemporaryInfoMessages();

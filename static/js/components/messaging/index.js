@@ -91,7 +91,7 @@ export class MessagingComponent {
     }
 
     // Send message to API and handle response
-    async sendMessage(message, imageDataToSend = null, skipUserMessage = false) {
+    async sendMessage(message, imageDataToSend = null, skipUserMessage = false, isRetry = false) { // Added isRetry parameter
         if (!message.trim() && !imageDataToSend) return;
         
         const component = this;
@@ -153,6 +153,7 @@ export class MessagingComponent {
             let waitingForTokens = false; // Track if we're waiting for tokens after recursion depth change
             let lastToken = ''; // Track the last token to prevent duplicates
             
+            // Pass the isRetry flag to streamChatMessage
             await streamChatMessage(message, formattedImageData, {
                 onToken: (token) => {
                     // Skip empty tokens
@@ -302,7 +303,7 @@ export class MessagingComponent {
                     // Clear the image data
                     this.clearImageData();
                 }
-            });
+            }, isRetry); // Pass isRetry here
             
             // Clear the image after sending
             this.clearImageData();

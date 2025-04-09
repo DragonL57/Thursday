@@ -28,8 +28,10 @@ def chat_stream():
         
         user_message = request.json.get('message')
         image_data = request.json.get('imageData')
+        is_retry = request.json.get('is_retry', False) # Get the retry flag
         
         if not user_message and not image_data:
+            return jsonify({"error": "No message or image provided"}), 400
             return jsonify({"error": "No message or image provided"}), 400
 
         # Get session ID (or client IP if no session available)
@@ -87,6 +89,21 @@ def chat_stream():
             from tools.notes import reset_notes
             reset_notes()
             
+            # If this is a retry, remove the last user message and all subsequent assistant/tool messages
+            if is_retry and len(user_assistant.messages) > 0:
+                print("Retry detected: Removing last user turn and subsequent messages from history.")
+                # Find the index of the last message with role 'user'
+                last_user_message_index = -1
+                for i in range(len(user_assistant.messages) - 1, -1, -1):
+                    if user_assistant.messages[i].get("role") == "user":
+                        last_user_message_index = i
+                        break
+                
+                # If a user message was found, remove it and everything after it
+                if last_user_message_index != -1:
+                    print(f"Removing messages from index {last_user_message_index} onwards.")
+                    del user_assistant.messages[last_user_message_index:]
+                
             # Add user message to assistant's conversation history - only if there's content
             if user_message or images:
                 user_assistant.messages.append({
