@@ -4,6 +4,8 @@ Tool execution and processing
 
 import json
 import inspect
+import time
+import random
 from colorama import Fore, Style
 from pydantic import BaseModel
 from tools import validate_tool_call, tool_report_print
@@ -311,22 +313,75 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         completion_args = {k: v for k, v in completion_args.items() if v is not None}
         
         print(f"Making follow-up LiteLLM API call with model: {assistant.model}")
-        try:
-            next_response = litellm.completion(**completion_args)
-            print(f"Follow-up API call successful. Response type: {type(next_response)}")
-            
-            # Debug the response content - make this more robust with defensive checks
-            if isinstance(next_response, dict) and "choices" in next_response and next_response["choices"]:
-                message = next_response["choices"][0].get("message", {})
-                content = message.get("content", "")
-                tool_calls = message.get("tool_calls")
-                print(f"Follow-up response content: {content[:100]}...")
-                print(f"Follow-up response has {len(tool_calls) if tool_calls else 0} tool calls")
-            else:
-                print(f"WARNING: Follow-up response format: {type(next_response)}")
-        except Exception as e:
-            print(f"Error during follow-up LiteLLM API call: {e}")
-            raise
+        
+        # Add retry logic for API calls
+        max_retries = 5  # Maximum number of retry attempts
+        base_retry_delay = 1  # Base delay in seconds
+        max_retry_delay = 3  # Maximum retry delay in seconds
+        
+        # Initialize retry variables
+        retry_count = 0
+        next_response = None
+        last_error = None
+        
+        while retry_count <= max_retries:
+            try:
+                if retry_count > 0:
+                    # Calculate exponential backoff with jitter
+                    delay = min(base_retry_delay * (2 ** (retry_count - 1)) + (0.1 * random.random()), max_retry_delay)
+                    print(f"{Fore.YELLOW}Retry attempt {retry_count}/{max_retries} after {delay:.2f}s delay{Style.RESET_ALL}")
+                    
+                    # Provide informative message to user via callback
+                    retry_msg = f"The model is currently busy. Retrying... (attempt {retry_count}/{max_retries})"
+                    if tool_event_callback:
+                        for chunk in tool_event_callback("info", retry_msg, True):
+                            yield chunk
+                    
+                    time.sleep(delay)  # Wait before retrying
+                
+                next_response = litellm.completion(**completion_args)
+                print(f"Follow-up API call successful. Response type: {type(next_response)}")
+                
+                # Debug the response content - make this more robust with defensive checks
+                if isinstance(next_response, dict) and "choices" in next_response and next_response["choices"]:
+                    message = next_response["choices"][0].get("message", {})
+                    content = message.get("content", "")
+                    tool_calls = message.get("tool_calls")
+                    print(f"Follow-up response content: {content[:100]}...")
+                    print(f"Follow-up response has {len(tool_calls) if tool_calls else 0} tool calls")
+                else:
+                    print(f"WARNING: Follow-up response format: {type(next_response)}")
+                
+                # Successful call, break out of retry loop
+                break
+                
+            except Exception as e:
+                last_error = e
+                retry_count += 1
+                
+                # Check if this is a retryable error (503, overloaded model, etc.)
+                is_retryable = False
+                error_str = str(e).lower()
+                
+                if "503" in error_str or "service unavailable" in error_str or "overloaded" in error_str:
+                    is_retryable = True
+                    print(f"{Fore.YELLOW}Retryable error detected: {e}{Style.RESET_ALL}")
+                elif "429" in error_str or "rate limit" in error_str or "too many requests" in error_str:
+                    is_retryable = True
+                    print(f"{Fore.YELLOW}Rate limit error detected: {e}{Style.RESET_ALL}")
+                elif "timeout" in error_str or "connection" in error_str or "network" in error_str:
+                    is_retryable = True
+                    print(f"{Fore.YELLOW}Network error detected: {e}{Style.RESET_ALL}")
+                
+                if not is_retryable or retry_count > max_retries:
+                    print(f"{Fore.RED}Error during follow-up LiteLLM API call (not retrying): {e}{Style.RESET_ALL}")
+                    raise
+                
+                print(f"{Fore.YELLOW}Error during follow-up LiteLLM API call (will retry): {e}{Style.RESET_ALL}")
+        
+        # If we've exhausted all retries without success
+        if next_response is None:
+            raise Exception(f"API call failed after {max_retries} retries. Last error: {last_error}")
         
         # Process the new response recursively, incrementing the recursion depth
         next_generator = process_tool_calls(

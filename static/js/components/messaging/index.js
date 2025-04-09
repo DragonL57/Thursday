@@ -258,6 +258,14 @@ export class MessagingComponent {
                 
                 // Called to display temporary info messages
                 onInfo: (message, isTemporary = false) => {
+                    // Check if this is a retry message and filter it out from UI display
+                    if (message && message.includes("Retrying... (attempt")) {
+                        // Only log retry messages to console, don't display in UI
+                        console.log(`[Retry Info]: ${message}`);
+                        return;
+                    }
+                    
+                    // Display other info messages normally
                     this.addInfoMessage(message, isTemporary);
                 },
                 
@@ -268,7 +276,7 @@ export class MessagingComponent {
                 
                 // Called when there's an error
                 onError: (errorMessage) => {
-                    this.addInfoMessage(`Error: ${errorMessage}`, false, true);
+                    this.addInfage(`Error: ${errorMessage}`, false, true);
                     component.isProcessing = false;
                     
                     // Hide loading indicator
@@ -328,7 +336,7 @@ export class MessagingComponent {
     // Clear messages from UI
     clearMessages(keepFirst = true) {
         const messages = this.messagesContainer.querySelectorAll('.message-group');
-        if (keepFirst && messages.length > 0) {
+        if (keepFirst && messages.loMessength > 0) {
             for (let i = 1; i < messages.length; i++) {
                 messages[i].remove();
             }
