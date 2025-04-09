@@ -341,8 +341,35 @@ export class ToolCallHandler {
                 
                 let content = toolCall.result.toString();
                 
-                // Format JSON
-                if ((content.startsWith('{') && content.endsWith('}')) || 
+                // Special handling for note tools to show actual content
+                if (toolCall.name === 'add_note' || toolCall.name === 'update_note' || toolCall.name === 'get_notes') {
+                    try {
+                        const args = JSON.parse(toolCall.args || '{}');
+                        
+                        // Always expand note tool results for better visibility
+                        container.classList.remove('collapsed');
+                        
+                        // For add_note and update_note, make sure to show the actual content
+                        if ((toolCall.name === 'add_note' || toolCall.name === 'update_note') && args.content) {
+                            const topic = args.topic || 'Untitled';
+                            const section = args.section || null;
+                            
+                            // Format nicely with the note content prominently displayed
+                            content = args.content + "\n\n" + content;
+                        }
+                        
+                        // For get_notes, the result already contains the full content
+                        // No special handling needed as the API returns the complete note content
+                        
+                        // Apply special class for notes to enable styling
+                        result.classList.add('note-content');
+                        container.setAttribute('data-name', toolCall.name);
+                    } catch (e) {
+                        console.warn('Error parsing note tool arguments:', e);
+                    }
+                }
+                // Format JSON for other tools
+                else if ((content.startsWith('{') && content.endsWith('}')) || 
                     (content.startsWith('[') && content.endsWith(']'))) {
                     try {
                         content = JSON.stringify(JSON.parse(content), null, 2);
@@ -352,17 +379,22 @@ export class ToolCallHandler {
                 // Add error styling if needed
                 if (toolCall.status === 'error' || content.includes('Error:')) {
                     result.classList.add('error');
-                    // Auto-expand on error for visibility
-                    container.classList.remove('collapsed');
-                    this.smoothScrollToElement(container);
+                } else {
+                    result.classList.remove('error');
                 }
                 
+                // Format as code block for syntax highlighting
                 result.innerHTML = `<pre><code>${this._escapeHTML(content)}</code></pre>`;
                 
                 // Apply syntax highlighting
-                if (window.hljs) {
-                    const code = result.querySelector('code');
-                    if (code) window.hljs.highlightElement(code);
+                try {
+                    if (window.hljs) {
+                        result.querySelectorAll('pre code').forEach((block) => {
+                            window.hljs.highlightElement(block);
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Error applying syntax highlighting:', e);
                 }
             }
         }

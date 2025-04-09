@@ -156,7 +156,7 @@
     padding: 0;
     white-space: pre-wrap;
     word-break: break-word;
-    color: var(--text-primary); /* Use theme variable instead of hard-coded color */
+    color: #000000; /* Changed from var(--text-primary) to solid black */
 }
 
 .tool-result.error {
@@ -180,6 +180,21 @@
     overflow: hidden;
 }
 
+/* Styling for note tool results */
+.tool-container[data-name="add_note"] .tool-result pre,
+.tool-container[data-name="update_note"] .tool-result pre,
+.tool-container[data-name="get_notes"] .tool-result pre {
+    white-space: pre-wrap;
+    font-family: var(--font-family);
+    line-height: 1.5;
+    padding: 0.75rem;
+    background-color: rgba(var(--primary-color-rgb, 68, 85, 102), 0.06);
+}
+
+.tool-result.note-content {
+    max-height: 300px; /* Allow more space for note content */
+}
+
 /* Tool List - Collapsible Container with improved colors */
 .tool-list {
     padding: 6px;
@@ -194,8 +209,8 @@
     position: relative;
     overflow: hidden;
     transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1); /* Enhanced easing curve with longer duration */
-    max-height: 500px; /* Enough room for several tools when expanded */
-    overflow-y: auto; /* Make it scrollable when there are many tools */
+    max-height: none; /* Changed from 500px to allow full expansion */
+    /* Removed overflow-y: auto to eliminate scrollbar */
     cursor: pointer;
     /* Make sure the element is always displayed */
     min-height: 30px;
@@ -265,7 +280,8 @@
 }
 
 .tool-list:not(.collapsed) {
-    max-height: 500px !important; /* Ensure enough height when expanded */
+    max-height: none !important; /* Changed from 500px to show full height */
+    overflow: visible !important; /* Ensure all content is visible */
 }
 
 /* Make sure the header is always visible and clickable in collapsed state */
