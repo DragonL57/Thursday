@@ -405,7 +405,7 @@ export async function resetConversation() {
  * @returns {Promise<Object>} - The response data
  */
 export async function updateSettings(settings) {
-    const response = await fetchWithRetry('/settings', {
+    const response = await fetchWithRetry('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)

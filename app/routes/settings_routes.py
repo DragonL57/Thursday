@@ -71,4 +71,4 @@ class SettingsAPI(MethodView):
 
 # Register routes
 settings_view = SettingsAPI.as_view('settings')
-settings_bp.add_url_rule('/settings', view_func=settings_view)
+settings_bp.add_url_rule('/settings', view_func=settings_view, methods=['GET', 'POST'])
