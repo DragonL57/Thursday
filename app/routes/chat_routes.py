@@ -46,6 +46,9 @@ def chat_stream():
             # Use configured provider and model
             provider = getattr(conf, 'API_PROVIDER', 'pollinations')
             model_name = conf.MODEL
+            
+            # Ensure we're using the display model name, not the API model name
+            # The provider_manager or api_client will handle the mapping
         
         # Create or get user-specific assistant instance
         if session_id not in current_app.assistants:

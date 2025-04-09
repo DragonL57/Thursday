@@ -1,74 +1,74 @@
 """
-Settings-related routes
+Settings-related routes for the application
 """
 
-from flask import Blueprint, jsonify, request, session, current_app
+from flask import Blueprint, jsonify, request, current_app
+from flask.views import MethodView
 import config as conf
+import json
+import os
 
-settings_bp = Blueprint('settings', __name__)
+# Import the provider manager
+from utils.provider_manager import ProviderManager
 
-@settings_bp.route('/settings', methods=['POST'])
-def update_settings():
-    try:
-        settings = request.json
-        session_id = session.get('user_id', request.remote_addr)
+settings_bp = Blueprint('settings', __name__, url_prefix='/api')
+
+class SettingsAPI(MethodView):
+    """API for getting and updating settings"""
+    
+    def get(self):
+        """Get current settings"""
+        # Initialize provider manager if needed
+        ProviderManager.initialize()
         
-        # Update the config.py values
+        # Build available models list with proper names
+        models = [
+            {
+                'id': 'openai-large',
+                'name': 'GPT-4o',
+                'provider': 'pollinations',
+                'display_name': 'Pollinations: GPT-4o (openai-large)',
+                'api_name': 'openai-large'  # Don't modify, send as openai-large
+            },
+            {
+                'id': 'github/gpt-4o',
+                'name': 'GPT-4o',
+                'provider': 'github',
+                'display_name': 'GitHub: GPT-4o (github/gpt-4o)',
+                'api_name': 'github/gpt-4o'  # LiteLLM model name
+            },
+            {
+                'id': 'gemini/gemini-2.0-flash',
+                'name': 'Gemini 2.0 Flash',
+                'provider': 'litellm',
+                'display_name': 'LiteLLM: Gemini 2.0 Flash (gemini/gemini-2.0-flash)',
+                'api_name': 'gemini/gemini-2.0-flash'
+            }
+        ]
+        
+        # Return settings
+        return jsonify({
+            'provider': getattr(conf, 'API_PROVIDER', 'pollinations'),
+            'model': getattr(conf, 'MODEL', 'openai-large'),
+            'temperature': getattr(conf, 'TEMPERATURE', 1.0),
+            'max_tokens': getattr(conf, 'MAX_TOKENS', 8192),
+            'save_history': getattr(conf, 'SAVE_HISTORY', True),
+            'available_models': models
+        })
+    
+    def post(self):
+        """Update settings"""
+        settings = request.json
+        
+        # Update config
         updated_settings = conf.update_config(settings)
         
-        # Update active assistant instances
-        if session_id in current_app.assistants:
-            assistant = current_app.assistants[session_id]
-            if settings.get('provider'):
-                conf.API_PROVIDER = settings.get('provider')
-                assistant.update_provider(settings.get('provider'))
-                
-            if settings.get('model'):
-                assistant.model = settings['model']
-            
-            # Some models might allow temperature updates
-            if 'temperature' in settings and hasattr(current_app.assistants[session_id], 'set_temperature'):
-                try:
-                    current_app.assistants[session_id].set_temperature(float(settings['temperature']))
-                except (AttributeError, ValueError):
-                    pass
-        
-        return jsonify({"status": "Settings updated successfully", "settings": updated_settings})
-    except Exception as e:
-        return jsonify({"error": f"Failed to update settings: {str(e)}"}), 500
+        return jsonify({
+            'status': 'success',
+            'message': 'Settings updated successfully',
+            'settings': updated_settings
+        })
 
-# Path must be /api/settings, not settings/api
-@settings_bp.route('/api/settings', methods=['GET', 'POST'])
-def handle_api_settings():
-    if request.method == 'POST':
-        data = request.json
-        
-        # Update the global assistant with new settings
-        if current_app.assistant:
-            if data.get('provider'):
-                conf.API_PROVIDER = data.get('provider')
-                current_app.assistant.update_provider(data.get('provider'))
-            if data.get('model'):
-                current_app.assistant.model = data.get('model')
-            
-        # Store settings in session
-        session['settings'] = {
-            'provider': data.get('provider', conf.API_PROVIDER),
-            'model': data.get('model', conf.MODEL),
-            'temperature': data.get('temperature', conf.TEMPERATURE),
-            'max_tokens': data.get('max_tokens', conf.MAX_TOKENS),
-            'save_history': data.get('save_history', getattr(conf, 'SAVE_HISTORY', False))
-        }
-        
-        return jsonify({"status": "success", "message": "Settings updated"})
-    
-    # GET request - return current settings
-    settings = session.get('settings', {
-        'provider': conf.API_PROVIDER,
-        'model': conf.MODEL,
-        'temperature': conf.TEMPERATURE,
-        'max_tokens': conf.MAX_TOKENS,
-        'save_history': getattr(conf, 'SAVE_HISTORY', False)
-    })
-    
-    return jsonify(settings)
+# Register routes
+settings_view = SettingsAPI.as_view('settings')
+settings_bp.add_url_rule('/settings', view_func=settings_view)

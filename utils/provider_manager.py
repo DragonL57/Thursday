@@ -1,62 +1,133 @@
 """
-Provider fallback management for handling rate limits
+Provider Manager utility to handle provider fallbacks and model naming
 """
-import time
+
 import os
-from flask import g, has_app_context
-import config as conf
+import random
 
 class ProviderManager:
     """
-    Manages provider selection for models with multiple provider options.
+    Manages providers and their models to ensure consistent naming and behavior
     """
-    
-    # Constants for provider names
+    # Provider constants
     POLLINATIONS = 'pollinations'
     LITELLM = 'litellm'
     
-    # Provider configurations for different models
-    MODEL_PROVIDERS = {
-        'pollinations-gpt4o': {
-            'provider': POLLINATIONS,
-            'model_name': 'openai-large',
-        },
-        'github-gpt4o': {
-            'provider': LITELLM, 
-            'model_name': 'github/gpt-4o',
-            'env_var': 'GITHUB_API_KEY'  # Required environment variable
-        }
-        # Add more integrated models here as needed
+    # Normalized model names - DON'T map openai-large to openai
+    MODEL_MAPPING = {
+        # Do NOT map 'openai-large' to 'openai' - use as-is for API calls
+        'gpt-4o': 'openai-large',  # Map gpt-4o variants to openai-large
+        'gpt4o': 'openai-large',   # Map gpt4o variants to openai-large
     }
     
-    # Class-level storage for non-Flask contexts
-    _current_providers = {}
+    # Track providers and failover state
+    _initialized = False
+    _use_primary_prob = {}  # Probability of using primary provider per model family
+    _failure_count = {}     # Track failures per provider/model
     
     @classmethod
     def initialize(cls):
-        """Initialize provider manager with default settings"""
-        # Check environment variables for required providers
-        for model_key, config in cls.MODEL_PROVIDERS.items():
-            if 'env_var' in config:
-                env_var = config['env_var']
-                if not os.environ.get(env_var) and hasattr(conf, env_var):
-                    # Try to get it from config if it exists
-                    os.environ[env_var] = getattr(conf, env_var)
-        
-        # No other initialization needed currently
-        return True
+        """Initialize the provider manager."""
+        if not cls._initialized:
+            cls._initialized = True
+            cls._use_primary_prob = {
+                'gpt4o': 0.9,  # 90% chance to use primary provider for GPT-4o
+            }
+            cls._failure_count = {}
     
     @classmethod
-    def get_provider_and_model(cls, model_key):
-        """Get the provider and model name for a given model key"""
-        # Handle legacy integrated model name
-        if model_key == 'gpt4o':
-            # Default to pollinations for the legacy integration
-            return cls.POLLINATIONS, 'openai-large'
+    def normalize_model_name(cls, provider, model_name):
+        """
+        Normalize model name for a specific provider
         
-        if model_key not in cls.MODEL_PROVIDERS:
-            # Default to pollinations for unknown models
-            return cls.POLLINATIONS, model_key
+        Args:
+            provider: Provider name 
+            model_name: Original model name
+            
+        Returns:
+            Normalized model name for the provider
+        """
+        if provider == cls.POLLINATIONS:
+            # For Pollinations, check if we need to normalize the name
+            return cls.MODEL_MAPPING.get(model_name, model_name)
         
-        model_config = cls.MODEL_PROVIDERS[model_key]
-        return model_config['provider'], model_config['model_name']
+        # For other providers, return as is
+        return model_name
+    
+    @classmethod
+    def get_provider_and_model(cls, model_family):
+        """
+        Get the appropriate provider and model name for a model family
+        
+        Args:
+            model_family: The model family (e.g., 'gpt4o') 
+            
+        Returns:
+            Tuple of (provider, model_name)
+        """
+        # Initialize if needed
+        if not cls._initialized:
+            cls.initialize()
+            
+        # Handle specific model families
+        if model_family == 'gpt4o' or model_family == 'pollinations-gpt4o':
+            # Decide whether to use Pollinations or fallback to GitHub
+            use_pollinations = cls.should_use_primary('gpt4o')
+            
+            if use_pollinations:
+                # Return openai-large as is, no normalization needed
+                return cls.POLLINATIONS, 'openai-large'
+            else:
+                return cls.LITELLM, 'github/gpt-4o'
+                
+        elif model_family == 'github-gpt4o':
+            # Force GitHub provider
+            return cls.LITELLM, 'github/gpt-4o'
+            
+        # Default to Pollinations for unknown model families
+        return cls.POLLINATIONS, model_family
+    
+    @classmethod
+    def should_use_primary(cls, model_family):
+        """
+        Determine if we should use the primary provider for a model family
+        
+        Args:
+            model_family: The model family name
+            
+        Returns:
+            Boolean indicating whether to use primary provider
+        """
+        if model_family not in cls._use_primary_prob:
+            return True
+            
+        # Get current probability
+        prob = cls._use_primary_prob.get(model_family, 0.9)
+        
+        # Make the random decision
+        return random.random() < prob
+    
+    @classmethod
+    def handle_rate_limit(cls, model_family):
+        """
+        Handle a rate limit error from the primary provider
+        
+        Args:
+            model_family: The model family that encountered the error
+            
+        Returns:
+            Dict with fallback provider and model name or None if no fallback
+        """
+        if model_family == 'gpt4o':
+            # Decrease probability of using primary for this model family
+            cls._use_primary_prob[model_family] = max(0.1, cls._use_primary_prob.get(model_family, 0.9) - 0.3)
+            print(f"Reduced primary provider probability to {cls._use_primary_prob[model_family]}")
+            
+            # Return fallback info
+            return {
+                'provider': cls.LITELLM,
+                'model_name': 'github/gpt-4o'
+            }
+            
+        # No fallback for other model families
+        return None

@@ -21,12 +21,18 @@ export class ToolCallHandler {
             const messageContainer = document.createElement('div');
             messageContainer.className = 'tool-message';
             messageContainer.setAttribute('data-placement', 'after-user');
+            messageContainer.setAttribute('data-tool-container', 'true'); // Add explicit attribute to identify tool messages
+            messageContainer.setAttribute('data-no-copy', 'true'); // Add explicit marker to prevent copy buttons
             
             const contentContainer = document.createElement('div');
             contentContainer.className = 'message-content-container';
+            contentContainer.setAttribute('data-tool-content', 'true'); // Add attribute to container
+            contentContainer.setAttribute('data-no-copy', 'true'); // Add attribute to prevent copy buttons
             
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
+            bubble.setAttribute('data-tool-content', 'true'); // Add attribute to bubble
+            bubble.setAttribute('data-no-copy', 'true'); // Add attribute to prevent copy buttons
             
             const list = document.createElement('div');
             list.className = 'tool-list';
@@ -72,6 +78,14 @@ export class ToolCallHandler {
             // Store references
             this.currentMessageContainer = messageContainer;
             this.currentToolsList = list;
+
+            // Apply immediate cleanup to remove any copy buttons that might have been added
+            this.removeCopyButtonsFromToolMessages(messageContainer, true);
+            
+            // Also run a slightly delayed cleanup to catch any buttons added after initial rendering
+            setTimeout(() => {
+                this.removeCopyButtonsFromToolMessages(messageContainer, true);
+            }, 100);
         }
         
         return this.currentToolsList;
@@ -717,5 +731,35 @@ export class ToolCallHandler {
             return String(str);
         }
         return str
+    }
+
+    // Add a new method to remove copy buttons from tool messages
+    removeCopyButtonsFromToolMessages(container, recursive = false) {
+        // Handle operation immediately instead of delaying
+        if (!container) return;
+        
+        console.log('Removing copy buttons from tool message container');
+        
+        // Remove from this container
+        const copyButtons = container.querySelectorAll('.copy-markdown-button');
+        if (copyButtons.length > 0) {
+            console.log(`Found ${copyButtons.length} copy buttons to remove`);
+            copyButtons.forEach(button => {
+                console.log('Removing incorrectly added copy button from tool message');
+                button.remove();
+            });
+        }
+        
+        // If recursive, also look for all tool messages in the document
+        if (recursive) {
+            // Find all tool messages in the document
+            const allToolMessages = document.querySelectorAll('.tool-message, [data-tool-container="true"]');
+            allToolMessages.forEach(toolMsg => {
+                if (toolMsg !== container) { // Skip the container we already processed
+                    const btns = toolMsg.querySelectorAll('.copy-markdown-button');
+                    btns.forEach(btn => btn.remove());
+                }
+            });
+        }
     }
 }
