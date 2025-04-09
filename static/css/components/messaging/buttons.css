@@ -48,6 +48,14 @@
     cursor: not-allowed;
 }
 
+/* Create a container for the buttons to ensure proper horizontal alignment */
+.message-buttons-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+
 /* Copy markdown button for messages - updated for hover visibility */
 .copy-markdown-button {
     position: relative;
@@ -57,8 +65,6 @@
     background-color: transparent; /* Make background transparent */
     border-radius: 4px;
     padding: 0.25rem;
-    margin-top: 0.5rem;
-    margin-left: 1rem;
     font-size: 0.8rem;
     color: var(--text-secondary);
     cursor: pointer !important;
@@ -74,14 +80,14 @@
 }
 
 /* Show copy button when hovering over message content container */
-.message-content-container:hover .copy-markdown-button {
+.message-content-container:hover .copy-markdown-button,
+.message-content-container:hover .retry-button {
     opacity: 0.7; /* Show when hovering */
 }
 
 /* Different positioning for user messages */
-.user-message .copy-markdown-button {
-    margin-right: 8px; /* Give some space on the right side */
-    margin-left: 0;
+.user-message .message-buttons-container {
+    justify-content: flex-end; /* Right-align for user messages */
 }
 
 .copy-markdown-button:hover {
@@ -124,4 +130,42 @@
 
 .copy-feedback.visible {
     opacity: 1;
+}
+
+/* Retry button styling */
+.retry-button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: transparent;
+    border-radius: 4px;
+    padding: 0.25rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer !important;
+    opacity: 0; /* Hide by default */
+    transition: opacity 0.2s ease, transform 0.1s ease;
+    z-index: 15;
+    height: 24px;
+    width: 24px;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    margin-right: 4px; /* Add small margin between buttons */
+}
+
+.retry-button:hover {
+    opacity: 1 !important;
+    transform: scale(1.05);
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.retry-button:active {
+    transform: scale(0.95);
+}
+
+.dark-mode .retry-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }

@@ -7,6 +7,8 @@ export class MessageRenderer {
         this._processedCopyButtons = new Set();
         // Track active tool status indicators
         this._activeToolIndicators = new Map();
+        // Add a tracking set for retry buttons
+        this._processedRetryButtons = new Set();
     }
     
     // Add message to the UI
@@ -354,6 +356,17 @@ export class MessageRenderer {
             messageGroup.id = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
         }
         
+        // Create a container for the buttons
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'message-buttons-container';
+        messageElement.appendChild(buttonsContainer);
+        
+        // Add retry button only for user messages
+        if (messageGroup.classList.contains('user-message')) {
+            const retryButton = this.createRetryButton(messageGroup);
+            buttonsContainer.appendChild(retryButton);
+        }
+        
         // Create button with unique ID
         const copyButton = document.createElement('div');
         copyButton.className = 'copy-markdown-button';
@@ -375,7 +388,113 @@ export class MessageRenderer {
             });
         }
         
-        messageElement.appendChild(copyButton);
+        buttonsContainer.appendChild(copyButton);
+    }
+    
+    // Create a retry button for user messages
+    createRetryButton(messageGroup) {
+        const retryButton = document.createElement('div');
+        retryButton.className = 'retry-button';
+        retryButton.innerHTML = '<span class="material-icons-round">refresh</span>';
+        retryButton.setAttribute('title', 'Regenerate response');
+        
+        const buttonId = `retry-btn-${messageGroup.id}`;
+        retryButton.setAttribute('data-btn-id', buttonId);
+        
+        // Only add event listener if not already processed
+        if (!this._processedRetryButtons.has(buttonId)) {
+            this._processedRetryButtons.add(buttonId);
+            
+            retryButton.addEventListener('click', async (e) => {
+                e.stopPropagation(); // Prevent event bubbling
+                e.stopImmediatePropagation(); // Stop immediate propagation
+                console.log('Retry button clicked:', messageGroup.id);
+                
+                // Get the message content - with enhanced extraction to prevent duplicates
+                let content;
+                
+                // First try to get the markdown attribute which should be most accurate
+                if (messageGroup.hasAttribute('data-markdown')) {
+                    content = messageGroup.getAttribute('data-markdown');
+                    console.log('Got message content from data-markdown attribute');
+                } 
+                // Fall back to paragraph text content which is how user messages are usually formatted
+                else {
+                    const paragraphElement = messageGroup.querySelector('.message-bubble p');
+                    if (paragraphElement) {
+                        content = paragraphElement.textContent.trim();
+                        console.log('Got message content from paragraph element');
+                    } 
+                    // Last resort - get from entire message bubble
+                    else {
+                        const messageBubble = messageGroup.querySelector('.message-bubble');
+                        content = messageBubble ? messageBubble.textContent.trim() : '';
+                        console.log('Got message content from message bubble');
+                    }
+                }
+                
+                if (!content) {
+                    console.error('No content found for retry');
+                    return;
+                }
+                
+                // Enhanced duplication cleaning
+                // First check for simple duplicated line - very common in chat UIs
+                if (content.includes('\n\n')) {
+                    const lines = content.split('\n\n').filter(line => line.trim());
+                    if (lines.length >= 2 && this.stringSimilarity(lines[0], lines[1]) > 0.9) {
+                        content = lines[0]; // Keep just the first instance
+                        console.log('Detected and fixed exact duplicate lines');
+                    }
+                }
+                
+                // Then apply general duplicate cleaning
+                content = this.removeDuplicateContent(content);
+                console.log(`Cleaned message for retry: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
+                
+                // Check if an image was attached to this message
+                const messageImage = messageGroup.querySelector('.message-image img');
+                let imageData = null;
+                
+                if (messageImage && messageImage.src) {
+                    // If the image is a base64 data URL, use it directly
+                    if (messageImage.src.startsWith('data:')) {
+                        imageData = messageImage.src;
+                    }
+                }
+                
+                // Find and remove the next assistant message if it exists
+                let nextElement = messageGroup.nextElementSibling;
+                while (nextElement) {
+                    if (nextElement.classList.contains('assistant-message') || 
+                        nextElement.classList.contains('tool-message') ||
+                        nextElement.classList.contains('info-message')) {
+                        
+                        nextElement.remove();
+                        nextElement = messageGroup.nextElementSibling;
+                    } else {
+                        break;
+                    }
+                }
+                
+                // Resend the message
+                try {
+                    // Add a temporary loading message
+                    this.messagingComponent.addInfoMessage('Regenerating response...', true);
+                    
+                    // Pass true as the third parameter to skip adding a new user message
+                    await this.messagingComponent.sendMessage(content, imageData, true);
+                    
+                    // Clear the temporary message
+                    this.messagingComponent.clearTemporaryInfoMessages();
+                } catch (error) {
+                    console.error('Error regenerating response:', error);
+                    this.messagingComponent.addInfoMessage('Failed to regenerate response. Please try again.', false, true);
+                }
+            });
+        }
+        
+        return retryButton;
     }
 
     // Completely rewritten copy function specifically for Linux compatibility
@@ -443,6 +562,16 @@ export class MessageRenderer {
         if (content.length % 2 === 0 && content.substring(0, halfLength) === content.substring(halfLength)) {
             console.log('Detected exact duplicate content, removing duplicate half');
             return content.substring(0, halfLength);
+        }
+        
+        // Check for duplicated lines (common in chat interfaces)
+        const lines = content.split('\n').filter(line => line.trim());
+        if (lines.length >= 2) {
+            // Check for immediate duplicated lines - very common pattern
+            if (lines[0] === lines[1]) {
+                console.log('Found duplicated first line, removing duplicate');
+                return lines[0];
+            }
         }
         
         // Check for common cases - entire paragraphs duplicated adjacently

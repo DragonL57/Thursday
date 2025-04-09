@@ -91,7 +91,7 @@ export class MessagingComponent {
     }
 
     // Send message to API and handle response
-    async sendMessage(message, imageDataToSend = null) {
+    async sendMessage(message, imageDataToSend = null, skipUserMessage = false) {
         if (!message.trim() && !imageDataToSend) return;
         
         const component = this;
@@ -117,8 +117,10 @@ export class MessagingComponent {
         // Determine if we have an image
         const hasImage = !!imageDataToSend;
         
-        // Add user message to the UI
-        this.messageRenderer.addMessage(message, true, hasImage);
+        // Only add user message to UI if we're not skipping it (for retry)
+        if (!skipUserMessage) {
+            this.messageRenderer.addMessage(message, true, hasImage);
+        }
         
         // Clear the input field
         this.elements.userInput.value = '';
@@ -342,9 +344,18 @@ export class MessagingComponent {
         if (userMessages.length > 0) {
             const messageBubble = userMessages[0].querySelector('.message-bubble');
             if (messageBubble) {
+                // First try to get from data-markdown attribute for accurate content
+                const markdownContent = userMessages[0].getAttribute('data-markdown');
+                if (markdownContent) {
+                    return markdownContent;
+                }
+                
+                // Fall back to text content
                 const paragraphs = messageBubble.querySelectorAll('p');
                 if (paragraphs.length > 0) {
                     return paragraphs[0].textContent.trim();
+                } else {
+                    return messageBubble.textContent.trim();
                 }
             }
         }
