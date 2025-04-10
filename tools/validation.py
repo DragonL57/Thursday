@@ -32,6 +32,19 @@ KNOWN_TOOLS = {
         "required": ["url_or_id"],
         "optional": ["languages", "combine_all"]
     },
+    # Reddit tools
+    "search_reddit_posts": {
+        "required": ["query"],
+        "optional": ["subreddit", "sort", "time_filter", "limit"]
+    },
+    "get_reddit_post": {
+        "required": [],  # Either post_id or post_url will be required but handled in the function
+        "optional": ["post_id", "post_url", "include_comments", "comment_sort", "comment_limit", "comment_depth"]
+    },
+    "get_subreddit_posts": {
+        "required": ["subreddit"],
+        "optional": ["sort", "time_filter", "limit"]
+    },
     "run_shell_command": {"required": ["command", "blocking"], "optional": ["print_output"]},
     "get_current_datetime": {"required": [], "optional": []},
     "get_current_directory": {"required": [], "optional": []},

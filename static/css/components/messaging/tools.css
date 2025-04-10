@@ -168,6 +168,41 @@
     color: #d32f2f;
 }
 
+.tool-result.encoding-error {
+    background-color: rgba(255, 152, 0, 0.08);
+    border-left: 3px solid rgba(255, 152, 0, 0.8);
+    position: relative;
+    padding-top: 42px;
+    margin-top: 8px;
+    border-radius: 6px;
+    overflow: visible;
+}
+
+.tool-result.encoding-error::before {
+    content: "⚠️ Encoding Issue Detected";
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    font-size: 0.85rem;
+    color: #ff9800;
+    font-weight: bold;
+    background-color: rgba(255, 152, 0, 0.1);
+    padding: 4px 8px;
+    border-radius: 4px;
+    width: calc(100% - 24px);
+}
+
+.tool-result.encoding-error code {
+    color: #ff9800;
+    opacity: 0.9;
+    white-space: normal;
+    word-break: break-all;
+}
+
+.tool-result.encoding-error pre {
+    max-height: 200px;
+}
+
 .tool-result.hidden {
     display: none;
 }
@@ -372,6 +407,20 @@
 .dark-mode .tool-result.error {
     background-color: rgba(211, 47, 47, 0.15);
     border-left: 2px solid rgba(211, 47, 47, 0.6);
+}
+
+.dark-mode .tool-result.encoding-error {
+    background-color: rgba(255, 152, 0, 0.15);
+    border-left: 3px solid rgba(255, 152, 0, 0.6);
+}
+
+.dark-mode .tool-result.encoding-error::before {
+    background-color: rgba(255, 152, 0, 0.2);
+    color: #ffb74d;
+}
+
+.dark-mode .tool-result.encoding-error code {
+    color: #ffb74d;
 }
 
 .dark-mode .tool-result code {

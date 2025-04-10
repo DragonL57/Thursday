@@ -286,6 +286,16 @@ export class MessageRenderer {
         // Apply code syntax highlighting
         element.querySelectorAll('pre code').forEach((block) => {
             try {
+                // Check for encoding gibberish in tool results
+                if (block.closest('.tool-result') && 
+                    this._detectEncodingIssues(block.textContent)) {
+                    
+                    const toolResult = block.closest('.tool-result');
+                    if (toolResult) {
+                        toolResult.classList.add('encoding-error');
+                    }
+                }
+                
                 hljs.highlightElement(block);
             } catch (e) {
                 console.warn('Error highlighting code block:', e);
@@ -875,5 +885,42 @@ export class MessageRenderer {
         }
         
         return false;
+    }
+
+    // Add a helper method to detect encoding issues
+    _detectEncodingIssues(content) {
+        if (!content || typeof content !== 'string') return false;
+        
+        // Skip short content
+        if (content.length < 50) return false;
+        
+        // Take a sample from the beginning
+        const sample = content.substring(0, 300);
+        
+        // Count unusual characters (non-ASCII and not common punctuation)
+        const unusualChars = sample.replace(/[\x20-\x7E\s\n\r\t]/g, '').length;
+        const ratio = unusualChars / sample.length;
+        
+        // Look for patterns that indicate gibberish
+        const hasRandomPunctuation = /[^\w\s\n\r\t]{5,}/g.test(sample);
+        const hasUnreadableSequences = /[\x00-\x1F\x7F-\xFF]{5,}/g.test(sample);
+        
+        // Check for replacement characters which indicate encoding problems
+        const replacementCharRatio = (sample.match(/�/g) || []).length / sample.length;
+        
+        // Check if content has very few spaces (unusual for natural text)
+        const spaceRatio = (sample.match(/\s/g) || []).length / sample.length;
+        const hasAbnormalSpacing = spaceRatio < 0.05 && sample.length > 50;
+        
+        // Consider it an encoding issue if:
+        // 1. There's a high ratio of unusual characters
+        // 2. There are sequences of random punctuation or unreadable characters
+        // 3. There are many replacement characters
+        // 4. The text has abnormally low spacing
+        return ratio > 0.2 || 
+               hasRandomPunctuation || 
+               hasUnreadableSequences || 
+               replacementCharRatio > 0.05 ||
+               hasAbnormalSpacing;
     }
 }

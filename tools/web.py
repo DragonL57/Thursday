@@ -4,6 +4,7 @@ Functions for web-related operations.
 
 import webbrowser
 import requests
+import re  # Add missing import for regular expressions
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from duckduckgo_search.exceptions import DuckDuckGoSearchException, RatelimitException, TimeoutException
@@ -151,6 +152,143 @@ def read_website_content(
         'Cache-Control': 'max-age=0',
     }
     
+    # Enhanced function to detect encoding with multiple fallbacks
+    def detect_and_decode_content(response_content):
+        """
+        Detect and decode content with multiple fallback options
+        Returns a tuple of (decoded_text, encoding_used)
+        """
+        # Try to extract encoding from content-type header or meta tags first
+        encodings_to_try = []
+        
+        # Use chardet for precise encoding detection
+        try:
+            import chardet
+            detection = chardet.detect(response_content)
+            if detection and detection['confidence'] > 0.7:
+                encodings_to_try.append(detection['encoding'])
+                tool_report_print("Encoding Detection:", f"Detected encoding: {detection['encoding']} (confidence: {detection['confidence']})")
+        except ImportError:
+            tool_report_print("Notice:", "chardet library not available, using fallback encoding detection")
+            
+            # If chardet is not available, try to detect encoding from common patterns
+            # HTML5 default encoding is UTF-8
+            if b'<meta charset="utf-8"' in response_content or b'<meta charset="UTF-8"' in response_content:
+                encodings_to_try.append('utf-8')
+                tool_report_print("Encoding Detection:", "Found UTF-8 charset in meta tag")
+            
+            try:
+                # Check for other charset declarations
+                charset_match = re.search(b'<meta[^>]*charset=[\'"](.*?)[\'"]', response_content)
+                if charset_match:
+                    detected_charset = charset_match.group(1).decode('ascii', errors='ignore').lower()
+                    if detected_charset and detected_charset not in encodings_to_try:
+                        encodings_to_try.append(detected_charset)
+                        tool_report_print("Encoding Detection:", f"Found charset in meta tag: {detected_charset}")
+            except Exception as e:
+                tool_report_print("Warning:", f"Error detecting charset from meta tag: {str(e)}")
+        
+        # Add common encodings as fallbacks
+        common_encodings = ['utf-8', 'utf-16', 'iso-8859-1', 'windows-1252', 'latin1', 'cp1252', 'ascii', 'big5', 'euc-jp', 'euc-kr', 'gb2312', 'shift_jis']
+        encodings_to_try.extend([enc for enc in common_encodings if enc not in encodings_to_try])
+        
+        # Try all potential encodings
+        for encoding in encodings_to_try:
+            if not encoding:
+                continue
+                
+            try:
+                decoded_text = response_content.decode(encoding)
+                
+                # Perform additional validation to check if the decoding is reasonable
+                if not is_valid_decoded_text(decoded_text):
+                    tool_report_print("Validation:", f"Content decoded with {encoding} failed validation, trying next encoding")
+                    continue
+                
+                return decoded_text, encoding
+            except (UnicodeDecodeError, LookupError) as e:
+                tool_report_print("Decode Error:", f"Failed with encoding {encoding}: {str(e)}")
+                continue
+        
+        # Last resort: force decode with utf-8, ignoring errors
+        try:
+            tool_report_print("Fallback:", "Using forced UTF-8 decoding with error replacement")
+            decoded_text = response_content.decode('utf-8', errors='replace')
+            
+            # We need to check if the result is actually usable
+            if is_valid_decoded_text(decoded_text):
+                return decoded_text, 'utf-8-replace'
+            else:
+                # Try latin1 which can decode any byte sequence
+                tool_report_print("Fallback:", "UTF-8 decode with replacement resulted in unusable content, trying latin1")
+                latin1_text = response_content.decode('latin1', errors='replace')
+                return latin1_text, 'latin1-forced' if is_valid_decoded_text(latin1_text) else None
+        except Exception as e:
+            tool_report_print("Error:", f"Failed all decoding attempts: {str(e)}", is_error=True)
+            return None, None
+    
+    # Add a new function to validate if the decoded text is plausible web content
+    def is_valid_decoded_text(text):
+        if not text:
+            return False
+            
+        # Check 1: Must have some recognizable HTML or text patterns
+        if not any(pattern in text.lower() for pattern in ['<html', '<body', '<div', '<p', '<h1', '<h2', '<a href', 'http']):
+            # If it doesn't look like HTML, check if it's at least readable text
+            # Count readable ASCII characters
+            readable_chars = sum(1 for c in text[:500] if 32 <= ord(c) <= 126)
+            if readable_chars / min(len(text[:500]), 500) < 0.5:  # Less than 50% readable
+                return False
+        
+        # Check 2: Should not have too many binary or control characters
+        binary_chars = sum(1 for c in text[:1000] if ord(c) < 9 or 14 <= ord(c) <= 31)
+        if binary_chars > 10:  # Arbitrary threshold
+            return False
+        
+        # Check 3: Detect if text contains mostly mojibake/replacement characters
+        replacement_chars = text[:500].count('�')
+        if replacement_chars > len(text[:500]) * 0.1:  # More than 10% are replacement chars
+            return False
+            
+        # Check 4: Text should contain a reasonable amount of common words or characters
+        common_patterns = ['the', 'and', 'this', 'for', ' a ', ' to ', ' of ', ' in ', '<div', '<p', 'http']
+        pattern_matches = sum(1 for pattern in common_patterns if pattern in text.lower())
+        if pattern_matches < 2 and len(text) > 200:  # At least 2 common patterns in longer text
+            return False
+            
+        return True
+
+    # Function to clean content of problematic characters
+    def sanitize_content(text):
+        """Remove or replace problematic characters in the text"""
+        if not text:
+            return ""
+            
+        try:
+            # Replace control characters except standard whitespace
+            text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', text)
+            
+            # Check for high concentration of unusual characters (possible encoding issue)
+            unusual_chars = re.findall(r'[^\x00-\x7F]', text[:500])  # Check first 500 chars
+            unusual_ratio = len(unusual_chars) / min(len(text[:500]), 500) if text else 0
+            
+            if unusual_ratio > 0.3:  # If more than 30% are unusual characters
+                tool_report_print("Warning:", f"High concentration of non-ASCII characters detected ({unusual_ratio:.1%}), possible encoding issues", is_error=True)
+                # More aggressive cleaning for severe encoding issues
+                text = re.sub(r'[^\x20-\x7E\s]', '', text)  # Keep only basic ASCII and whitespace
+                
+            # Replace consecutive replacement characters with a single one
+            text = re.sub(r'�{2,}', '�', text)
+            
+            # Remove null bytes that might have been introduced
+            text = text.replace('\x00', '')
+            
+            return text
+        except Exception as e:
+            tool_report_print("Warning:", f"Error in sanitize_content: {str(e)}")
+            # Provide a basic fallback if regex fails
+            return text.replace('\x00', '').replace('�', '')
+    
     def try_wayback_machine(target_url, original_error=None):
         """Try to get content from Internet Archive's Wayback Machine as a fallback"""
         try:
@@ -223,8 +361,9 @@ def read_website_content(
             is_pdf = True
             tool_report_print("URL Type:", "Detected PDF file")
         
-        content = None
+        raw_content = None
         used_archive = False
+        encoding_used = None
         
         # Try direct access first
         try:
@@ -259,7 +398,7 @@ def read_website_content(
                         if inner_e.response.status_code in [403, 429, 451]:
                             archive_content, archive_success = try_wayback_machine(url, inner_e)
                             if archive_success and archive_content:
-                                content = archive_content
+                                raw_content = archive_content
                                 used_archive = True
                             else:
                                 raise inner_e
@@ -268,14 +407,19 @@ def read_website_content(
                 else:
                     raise e
                     
-            if not content:  # If we didn't get content from archive
-                content = response.content
+            if raw_content is None:  # If we didn't get content from archive
+                raw_content = response.content
+                
+                # Try to get encoding from response headers first
+                if response.encoding and response.encoding.upper() != 'ISO-8859-1':  # ISO-8859-1 is often the default fallback
+                    encoding_used = response.encoding
+                    tool_report_print("Encoding:", f"Using encoding from response headers: {encoding_used}")
                 
         except requests.exceptions.RequestException as direct_e:
             # For any request exception, try the archive
             archive_content, archive_success = try_wayback_machine(url, direct_e)
             if archive_success and archive_content:
-                content = archive_content
+                raw_content = archive_content
                 used_archive = True
             else:
                 raise direct_e
@@ -289,7 +433,7 @@ def read_website_content(
                     from PyPDF2 import PdfReader
                     
                     # Create a PDF reader object from the content
-                    pdf_file = io.BytesIO(content)
+                    pdf_file = io.BytesIO(raw_content)
                     pdf_reader = PdfReader(pdf_file)
                     
                     # Extract text from all pages
@@ -299,7 +443,7 @@ def read_website_content(
                         pdf_text.append(page.extract_text())
                     
                     # Join all pages with separator
-                    content = "\n\n--- Page Break ---\n\n".join(pdf_text)
+                    content_text = "\n\n--- Page Break ---\n\n".join(pdf_text)
                     tool_report_print("PDF Processing:", f"Successfully extracted text from {len(pdf_reader.pages)} pages using PyPDF2")
                     
                 except ImportError:
@@ -308,14 +452,14 @@ def read_website_content(
                         import pdfplumber
                         
                         # Create a PDF plumber object
-                        pdf_file = io.BytesIO(content)
+                        pdf_file = io.BytesIO(raw_content)
                         with pdfplumber.open(pdf_file) as pdf:
                             pdf_text = []
                             for page in pdf.pages:
                                 text = page.extract_text() or ""
                                 pdf_text.append(text)
                                 
-                            content = "\n\n--- Page Break ---\n\n".join(pdf_text)
+                            content_text = "\n\n--- Page Break ---\n\n".join(pdf_text)
                             tool_report_print("PDF Processing:", f"Successfully extracted text from {len(pdf.pages)} pages using pdfplumber")
                     except ImportError:
                         # If neither is available, inform the user
@@ -324,88 +468,166 @@ def read_website_content(
             except Exception as pdf_error:
                 tool_report_print("PDF Processing Error:", str(pdf_error), is_error=True)
                 return f"Error extracting text from PDF: {str(pdf_error)}. The URL points to a PDF file, but text extraction failed."
-        
-        # Regular HTML processing continues if not PDF
-        soup = BeautifulSoup(content, 'lxml')
-        
-        # If we used archive.org, try to clean up archive-specific elements
-        if used_archive:
-            # Remove any Wayback Machine toolbar or overlay
-            for element in soup.select('.wb-header, #wm-ipp-base, #donato'):
-                if element:
-                    element.decompose()
-            
-            tool_report_print("Source:", "Content retrieved from Internet Archive's Wayback Machine")
-                
-        # Remove script, style, and other non-content elements
-        for element in soup(['script', 'style', 'meta', 'noscript', 'header', 'footer', 'nav', 'aside', 'iframe', 'svg']):
-            element.decompose()
-            
-        # Check if content seems too short, which might indicate an anti-scraping page
-        body_text = soup.body.get_text(strip=True) if soup.body else ""
-        if len(body_text) < 200:
-            tool_report_print("Warning:", "Retrieved content is very short (<200 chars), likely not the full page", is_error=True)
-            if "captcha" in body_text.lower():
-                tool_report_print("Warning:", "Website may be showing a CAPTCHA page or anti-bot measures", is_error=True)
-                return "Error: This website appears to be protected against automated access. It might be showing a CAPTCHA or using anti-bot measures."
-            else:
-                tool_report_print("Warning:", "Retrieved content is minimal, might be due to access restrictions or JavaScript-heavy page", is_error=True)
-        
-        # Process based on extraction mode
-        if (extract_mode == "markdown"):
-            # A simple markdown conversion that preserves links and headers
-            result = []
-            
-            for elem in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']):
-                text = elem.get_text(strip=True)
-                if not text:
-                    continue
-                    
-                # Handle headings
-                if elem.name.startswith('h') and len(elem.name) == 2:
-                    level = int(elem.name[1])
-                    result.append('#' * level + ' ' + text)
-                # Handle links
-                elif elem.find('a'):
-                    for a in elem.find_all('a'):
-                        href = a.get('href', '')
-                        if href:
-                            # Handle relative URLs
-                            if href.startswith('/'):
-                                href = f"{parsed_url.scheme}://{parsed_url.netloc}{href}"
-                            link_text = a.get_text(strip=True)
-                            if link_text:
-                                a.replace_with(f'[{link_text}]({href})')
-                    result.append(elem.get_text(strip=True))
-                else:
-                    result.append(text)
-                    
-            content = '\n\n'.join(result)
         else:
-            # Default text mode - with better formatting
-            # Remove excessive whitespace and newlines
-            for br in soup.find_all('br'):
-                br.replace_with('\n')
-                
-            content = soup.get_text(separator='\n\n', strip=True)
+            # Detect and decode the content with proper encoding
+            decoded_content, detected_encoding = detect_and_decode_content(raw_content)
+            if decoded_content is None:
+                tool_report_print("Error:", "Failed to decode content with any encoding", is_error=True)
+                return "Error: The webpage content couldn't be properly decoded. This might be due to an unsupported character encoding or the content being binary data (like images or PDFs). Try a different URL or a text-based webpage."
             
-            # Clean up the content: remove multiple newlines and spaces
-            import re
-            content = re.sub(r'\n{3,}', '\n\n', content)  # Replace 3+ newlines with 2
-            content = re.sub(r' {2,}', ' ', content)      # Replace 2+ spaces with 1
+            encoding_used = detected_encoding
+            tool_report_print("Encoding:", f"Content decoded using {encoding_used} encoding")
+            
+            # Check for encoding issues or binary content
+            try:
+                if '�' in decoded_content[:500] or any(c in decoded_content[:1000] for c in ['\uFFFD', '\x00']):
+                    tool_report_print("Warning:", "Replacement characters detected, possible encoding issues", is_error=True)
+            except Exception as e:
+                tool_report_print("Warning:", f"Error checking for encoding issues: {str(e)}")
+            
+            # Clean content of problematic characters
+            decoded_content = sanitize_content(decoded_content)
+            
+            # Parse the HTML
+            try:
+                soup = BeautifulSoup(decoded_content, 'lxml')
+            except Exception as parse_error:
+                # If parsing fails with the detected encoding, try a more aggressive approach
+                tool_report_print("Error:", f"Failed to parse HTML: {str(parse_error)}", is_error=True)
+                tool_report_print("Action:", "Trying more aggressive content sanitization")
+                
+                # Force decode with latin1 which should always work
+                decoded_content = raw_content.decode('latin1', errors='ignore')
+                decoded_content = sanitize_content(decoded_content)
+                
+                try:
+                    soup = BeautifulSoup(decoded_content, 'lxml')
+                except Exception as second_parse_error:
+                    return f"Error: Could not parse the webpage content. The page might have malformed HTML or use a non-standard encoding. Error details: {str(second_parse_error)}"
+        
+            # If we used archive.org, try to clean up archive-specific elements
+            if used_archive:
+                # Remove any Wayback Machine toolbar or overlay
+                for element in soup.select('.wb-header, #wm-ipp-base, #donato'):
+                    if element:
+                        element.decompose()
+                
+                tool_report_print("Source:", "Content retrieved from Internet Archive's Wayback Machine")
+                    
+            # Remove script, style, and other non-content elements
+            for element in soup(['script', 'style', 'meta', 'noscript', 'header', 'footer', 'nav', 'aside', 'iframe', 'svg']):
+                element.decompose()
+                
+            # Check if content seems too short, which might indicate an anti-scraping page
+            body_text = soup.body.get_text(strip=True) if soup.body else ""
+            if len(body_text) < 200:
+                tool_report_print("Warning:", "Retrieved content is very short (<200 chars), likely not the full page", is_error=True)
+                if "captcha" in body_text.lower():
+                    tool_report_print("Warning:", "Website may be showing a CAPTCHA page or anti-bot measures", is_error=True)
+                    return "Error: This website appears to be protected against automated access. It might be showing a CAPTCHA or using anti-bot measures."
+                else:
+                    tool_report_print("Warning:", "Retrieved content is minimal, might be due to access restrictions or JavaScript-heavy page", is_error=True)
+            
+            # Process based on extraction mode
+            if (extract_mode == "markdown"):
+                # A simple markdown conversion that preserves links and headers
+                result = []
+                
+                for elem in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']):
+                    text = elem.get_text(strip=True)
+                    if not text:
+                        continue
+                        
+                    # Handle headings
+                    if elem.name.startswith('h') and len(elem.name) == 2:
+                        level = int(elem.name[1])
+                        result.append('#' * level + ' ' + text)
+                    # Handle links
+                    elif elem.find('a'):
+                        for a in elem.find_all('a'):
+                            href = a.get('href', '')
+                            if href:
+                                # Handle relative URLs
+                                if href.startswith('/'):
+                                    href = f"{parsed_url.scheme}://{parsed_url.netloc}{href}"
+                                link_text = a.get_text(strip=True)
+                                if link_text:
+                                    a.replace_with(f'[{link_text}]({href})')
+                        result.append(elem.get_text(strip=True))
+                    else:
+                        result.append(text)
+                        
+                content_text = '\n\n'.join(result)
+            else:
+                # Default text mode - with better formatting
+                # Remove excessive whitespace and newlines
+                for br in soup.find_all('br'):
+                    br.replace_with('\n')
+                    
+                content_text = soup.get_text(separator='\n\n', strip=True)
+                
+                # Clean up the content: remove multiple newlines and spaces
+                import re
+                content_text = re.sub(r'\n{3,}', '\n\n', content_text)  # Replace 3+ newlines with 2
+                content_text = re.sub(r' {2,}', ' ', content_text)      # Replace 2+ spaces with 1
+            
+            # Final check for encoding issues
+            try:
+                # Try to encode and then decode the content back - this can catch encoding issues
+                test_encode = content_text.encode('utf-8')
+                test_decode = test_encode.decode('utf-8')
+                
+                if test_decode != content_text:
+                    tool_report_print("Warning:", "Character encoding inconsistency detected, applying additional sanitization", is_error=True)
+                    content_text = sanitize_content(content_text)
+            except Exception as encoding_error:
+                tool_report_print("Warning:", f"Final encoding check failed: {str(encoding_error)}", is_error=True)
+                content_text = sanitize_content(content_text)
         
         # Truncate if content is very long
-        if len(content) > 50000:
-            content = content[:50000] + "\n\n[Content truncated due to length...]"
+        if len(content_text) > 50000:
+            content_text = content_text[:50000] + "\n\n[Content truncated due to length...]"
             tool_report_print("Notice:", "Content was truncated because it exceeded 50,000 characters")
             
-        # Check if the final content is empty
-        if not content or len(content.strip()) < 10:  # At least 10 chars to be considered non-empty
+        # Check if the final content is empty or appears to be gibberish
+        if not content_text or len(content_text.strip()) < 10:  # At least 10 chars to be considered non-empty
             tool_report_print("Error:", "Extraction resulted in empty content", is_error=True)
             return "Could not extract meaningful content from this website. The page might be protected, empty, or using client-side rendering that requires a browser."
             
-        tool_report_print("Status:", "Webpage content fetched successfully")
-        return content
+        # Check for gibberish content (high concentration of rare characters)
+        import re
+        
+        try:
+            # Count non-ASCII characters or unusual sequences in the first part of content
+            gibberish_chars = len(re.findall(r'[^\x20-\x7E\s.,;:!?\'"()[\]{}]', content_text[:1000]))
+            gibberish_ratio = gibberish_chars / min(len(content_text[:1000]), 1000) if content_text else 0
+            
+            replacement_ratio = content_text[:1000].count('�') / min(len(content_text[:1000]), 1000) if content_text else 0
+            
+            if gibberish_ratio > 0.3 or replacement_ratio > 0.1:  # If more than 30% are unusual characters or 10% are replacement chars
+                tool_report_print("Error:", f"Content appears to be gibberish or incorrectly decoded ({gibberish_ratio:.1%} unusual characters, {replacement_ratio:.1%} replacement characters)", is_error=True)
+                
+                # Provide a clearer error message with examples of the problematic content
+                sample_text = content_text[:200] + ("..." if len(content_text) > 200 else "")
+                return f"""Error: The webpage content appears to be incorrectly encoded or contains mostly non-readable characters. 
+
+This might be due to:
+1. The website using a non-standard character encoding
+2. Anti-scraping measures on the website
+3. The content requiring JavaScript to render
+4. The content being binary data (images, PDFs) rather than text
+
+Sample of problematic content:
+---
+{sample_text}
+---
+
+Try a different URL or a site with simpler content structure."""
+        except Exception as e:
+            tool_report_print("Warning:", f"Error checking for gibberish content: {str(e)}")
+        
+        tool_report_print("Status:", f"Webpage content fetched successfully using {encoding_used} encoding")
+        return content_text
         
     except requests.exceptions.RequestException as e:
         error_message = f"Error fetching webpage content: {e}"

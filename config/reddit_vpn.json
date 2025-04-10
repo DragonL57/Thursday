@@ -1,0 +1,10 @@
+{
+  "ssh_host": "",
+  "ssh_port": 22,
+  "ssh_user": "",
+  "ssh_key": "",
+  "auto_start": false,
+  "connection_timeout": 10,
+  "last_checked": 0,
+  "check_interval": 3600
+}

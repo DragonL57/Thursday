@@ -376,11 +376,26 @@ export class ToolCallHandler {
                     } catch (e) {} // Keep original if parsing fails
                 }
                 
+                // Check for encoding issues - add new detection
+                const hasEncodingIssues = this._detectEncodingIssues(content);
+                
                 // Add error styling if needed
                 if (toolCall.status === 'error' || content.includes('Error:')) {
                     result.classList.add('error');
+                    result.classList.remove('encoding-error');
+                } else if (hasEncodingIssues) {
+                    result.classList.add('encoding-error');
+                    result.classList.remove('error');
+                    // Add a helpful message prefix
+                    content = "The website content couldn't be decoded properly. This might be due to:\n" +
+                             "- Website using non-standard encoding\n" +
+                             "- Anti-scraping measures on the site\n" +
+                             "- Content requiring JavaScript to render\n\n" +
+                             "Try using a different URL or source.\n\n" +
+                             "Raw content sample:\n\n" + content;
                 } else {
                     result.classList.remove('error');
+                    result.classList.remove('encoding-error');
                 }
                 
                 // Format as code block for syntax highlighting
@@ -762,7 +777,14 @@ export class ToolCallHandler {
         if (typeof str !== 'string') {
             return String(str);
         }
+        
+        // Actually implement HTML escaping - the original function didn't escape anything
         return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     // Add a new method to remove copy buttons from tool messages
@@ -793,5 +815,43 @@ export class ToolCallHandler {
                 }
             });
         }
+    }
+
+    // Add a new helper method to detect encoding issues
+    _detectEncodingIssues(content) {
+        if (!content || typeof content !== 'string') return false;
+        
+        // Only process content from web-related tools - expanded to catch more tools
+        const webTools = ['read_website_content', 'get_website_text_content', 'fetch_webpage'];
+        
+        if (!this._currentToolName || !webTools.some(tool => this._currentToolName.includes(tool))) {
+            return false;
+        }
+        
+        // Check for common signs of encoding issues:
+        
+        // 1. High concentration of unusual characters
+        const sample = content.substring(0, 300); // Check just the beginning
+        const unusualChars = sample.replace(/[\x20-\x7E\s\n\r\t]/g, '').length;
+        const ratio = unusualChars / sample.length;
+        
+        // 2. Look for patterns that indicate gibberish
+        const hasRandomPunctuation = /[^\w\s\n\r\t]{5,}/g.test(sample);
+        const hasUnreadableSequences = /[\x00-\x1F\x7F-\xFF]{5,}/g.test(sample);
+        
+        // 3. Check for replacement characters (�) which indicate encoding problems
+        const replacementCharRatio = (sample.match(/�/g) || []).length / sample.length;
+        
+        // 4. Check if content has very few spaces (unusual for natural text)
+        const spaceRatio = (sample.match(/\s/g) || []).length / sample.length;
+        const hasAbnormalSpacing = spaceRatio < 0.05 && sample.length > 50;
+        
+        // Consider it an encoding issue if there are many unusual characters
+        // or patterns indicating gibberish
+        return ratio > 0.2 || 
+               hasRandomPunctuation || 
+               hasUnreadableSequences || 
+               replacementCharRatio > 0.05 ||
+               hasAbnormalSpacing;
     }
 }

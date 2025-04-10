@@ -99,6 +99,11 @@ Thursday comes with a set of built-in tools that you can use in your conversatio
 - **Web Interaction:**
   - `get_website_text_content` (Enhanced with timeout and extraction modes: 'text', 'markdown', or 'article')
 
+- **Reddit:**
+  - `search_reddit_posts` (Search for posts matching a query in a specific subreddit or across all subreddits)
+  - `get_reddit_post` (Get a specific post and its comments by ID or URL)
+  - `get_subreddit_posts` (Browse posts in a subreddit sorted by hot, new, top, etc.)
+
 - **File System:**
   - `list_dir`, `read_file`, `write_files`, `create_directory`, `copy_file`, `move_file`, `rename_file`, `rename_directory`, `get_file_metadata`, `get_directory_size`, `get_multiple_directory_size`
 

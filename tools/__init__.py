@@ -52,6 +52,9 @@ from .thinking import think
 # Import note-taking tools
 from .notes import add_note, update_note, get_notes, clear_notes, reset_notes
 
+# Import Reddit tools
+from .reddit import search_reddit_posts, get_reddit_post, get_subreddit_posts
+
 # Import validation
 from .validation import (
     validate_tool_call,
@@ -64,6 +67,11 @@ TOOLS = [
     web_search,
     read_website_content,
     get_youtube_transcript,
+    
+    # Reddit tools
+    search_reddit_posts,
+    get_reddit_post,
+    get_subreddit_posts,
     
     # Filesystem tools
     get_current_directory,

@@ -26,7 +26,8 @@ dependencies = [
     "litellm",
     "google-genai",
     "PyPDF2",
-    "pdfplumber"
+    "pdfplumber",
+    "sshuttle"
 ]
 
 [dependency-groups]
