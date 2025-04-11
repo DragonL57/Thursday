@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css">
     <!-- Remove Google Fonts link for Inter and keep only Material Icons -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round">
+    <link rel="stylesheet" href="/static/css/print.css" media="print">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@9.0.0/marked.min.js"></script>
@@ -198,6 +199,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         <div class="app-body">
             <main class="chat-container">
+                <div class="chat-header">
+                    <div class="chat-header-actions">
+                        <button id="exportPdfButton" class="export-pdf-button" title="Export chat as PDF">
+                            <span class="material-icons-round">picture_as_pdf</span>
+                            <span class="button-text">Print PDF</span>
+                        </button>
+                    </div>
+                </div>
                 <div class="messages" id="messages">
                     <div class="message-group assistant-message welcome-message" id="welcomeMessage">
                         <div class="message-content">

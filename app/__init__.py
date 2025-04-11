@@ -14,6 +14,7 @@ from app.utils.helpers import sanitize_filename
 
 # Import services and modules
 from assistant import Assistant
+from assistant.streaming import StreamHandler
 from tools import TOOLS
 import config as conf
 
@@ -63,6 +64,10 @@ def initialize_services(app):
             system_instruction=sys_instruct,
             tools=TOOLS
         )
+        
+        # Ensure the stream_handler is properly initialized
+        app.assistant.stream_handler = app.assistant.stream_handler or StreamHandler(app.assistant)
+        
     except Exception as e:
         print(f"Error initializing Assistant: {e}")
         traceback.print_exc()

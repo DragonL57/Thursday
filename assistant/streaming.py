@@ -475,40 +475,41 @@ class StreamHandler:
         """Handle streaming with litellm provider."""
         assistant = self.assistant
         
-        # Debug info for different models
-        if 'gemini' in assistant.model:
-            print(f"{Fore.YELLOW}Using Gemini-specific completion parameters{Style.RESET_ALL}")
-        elif 'github' in assistant.model:
-            print(f"{Fore.YELLOW}Using GitHub-specific completion parameters{Style.RESET_ALL}")
-        
         try:
-            # Get appropriate temperature setting
-            temperature = getattr(assistant, 'temperature', 0.7)
+            # Import config for temperature and other parameters
+            import config as conf
             
-            # Initialize the stream
+            # Initialize the stream with all necessary parameters
             completion_args = {
                 'model': assistant.model,
                 'messages': assistant.messages,
                 'tools': assistant.tools,
-                'temperature': temperature,
-                'stream': True
+                'temperature': conf.TEMPERATURE,
+                'top_p': conf.TOP_P,
+                'max_tokens': conf.MAX_TOKENS,
+                'seed': conf.SEED,
+                'stream': True  # Always stream for consistency
             }
             
-            # For GitHub models, check if image was removed and make note of it
-            if 'github' in assistant.model:
-                has_image_removed = False
-                for msg in assistant.messages:
-                    if isinstance(msg.get('content'), str) and '[Note: Images must be provided as public URLs' in msg.get('content', ''):
-                        has_image_removed = True
-                        break
+            # Add safety settings if available
+            safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
+            if safety_settings:
+                completion_args["safety_settings"] = safety_settings
                 
-                if has_image_removed:
-                    print(f"{Fore.YELLOW}Image was removed from request to GitHub model{Style.RESET_ALL}")
+            # Remove None values
+            completion_args = {k: v for k, v in completion_args.items() if v is not None}
             
+            # Debug info
+            print(f"{Fore.CYAN}Starting LiteLLM stream with model: {assistant.model}{Style.RESET_ALL}")
+            
+            # Start the stream
             stream = litellm.completion(**completion_args)
             
             # Process the stream
-            accumulated = ""
+            accumulated_content = ""
+            accumulated_tool_calls = []
+            last_content = None
+            
             for chunk in stream:
                 # Check if streaming was aborted
                 if self.stream_abort:
@@ -529,31 +530,127 @@ class StreamHandler:
                     
                 # Process content if present
                 if delta_content:
-                    accumulated += delta_content
-                    yield {"event": "token", "data": delta_content}
-                    
-                    # Call the callback if provided
-                    if callback:
-                        callback({"event": "token", "data": delta_content})
+                    # Deduplicate identical tokens that sometimes occur in streams
+                    if delta_content != last_content:
+                        accumulated_content += delta_content
+                        yield {"event": "token", "data": delta_content}
+                        
+                        # Call the callback if provided
+                        if callback:
+                            callback({"event": "token", "data": delta_content})
+                            
+                        last_content = delta_content
                 
-                # Check for tool calls - skip for now
+                # Process tool calls if present
                 try:
                     if choice.delta.tool_calls:
-                        continue
+                        for tool_call_delta in choice.delta.tool_calls:
+                            # Process tool call data
+                            index = tool_call_delta.index
+                            
+                            # Handle new tool call
+                            if index >= len(accumulated_tool_calls):
+                                accumulated_tool_calls.append({
+                                    "id": tool_call_delta.id or f"tool_{index}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_call_delta.function.name or "",
+                                        "arguments": tool_call_delta.function.arguments or ""
+                                    }
+                                })
+                            else:
+                                # Append to existing tool call
+                                if tool_call_delta.function and tool_call_delta.function.name:
+                                    accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
+                                if tool_call_delta.function and tool_call_delta.function.arguments:
+                                    accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
+                                    
+                            # Check if we have a complete tool call that we can yield
+                            if (accumulated_tool_calls[index]["function"]["name"] and
+                                accumulated_tool_calls[index]["function"]["arguments"] and
+                                accumulated_tool_calls[index]["function"]["arguments"].strip().endswith('}')):
+                                # We have a complete tool call - prepare it for yielding
+                                try:
+                                    # Parse the arguments as JSON to validate completeness
+                                    args_str = accumulated_tool_calls[index]["function"]["arguments"]
+                                    if args_str.strip():
+                                        json.loads(args_str)
+                                        
+                                    # Create tool call data format compatible with UI expectations
+                                    tool_data = {
+                                        "id": accumulated_tool_calls[index]["id"],
+                                        "name": accumulated_tool_calls[index]["function"]["name"],
+                                        "args": accumulated_tool_calls[index]["function"]["arguments"],
+                                        "status": "pending",
+                                        "result": None
+                                    }
+                                    
+                                    # Yield the tool call event
+                                    yield {"event": "tool_call", "data": tool_data}
+                                    
+                                    # Call the callback if provided
+                                    if callback:
+                                        callback({"event": "tool_call", "data": tool_data})
+                                        
+                                except json.JSONDecodeError:
+                                    # Arguments not complete yet, keep accumulating
+                                    pass
                 except (AttributeError, KeyError):
                     pass
                     
-            # Add the accumulated response to messages
-            if accumulated:
-                # Add the assistant's response to the conversation history
-                assistant.messages.append({"role": "assistant", "content": accumulated})
+            # Process the end of stream
+            if accumulated_content:
+                # Add the assistant's response to the conversation history if it's not already there
+                content_already_added = False
+                for msg in assistant.messages[-3:]:
+                    if msg.get('role') == 'assistant' and msg.get('content') == accumulated_content:
+                        content_already_added = True
+                        break
+                        
+                if not content_already_added:
+                    assistant.messages.append({"role": "assistant", "content": accumulated_content})
                 
-                # Final response
-                yield {"event": "final", "data": accumulated}
+                # Set the final response
+                assistant._final_response = accumulated_content
+                
+                # Send final event
+                yield {"event": "final", "data": accumulated_content}
                 
                 # Call the callback with final response
                 if callback:
-                    callback({"event": "final", "data": accumulated})
+                    callback({"event": "final", "data": accumulated_content})
+            
+            # Process tool calls if they weren't already processed during streaming
+            if accumulated_tool_calls and not assistant.current_tool_calls:
+                # Add the tool calls to the message
+                message_with_tool_calls = {
+                    "role": "assistant",
+                    "content": accumulated_content or "",
+                    "tool_calls": accumulated_tool_calls
+                }
+                
+                # Check if we've already added this exact message to avoid duplicates
+                already_added = False
+                for msg in assistant.messages[-3:]:
+                    if (msg.get('role') == 'assistant' and 
+                        msg.get('content') == message_with_tool_calls.get('content') and
+                        'tool_calls' in msg):
+                        already_added = True
+                        break
+                
+                # Only add if not already added
+                if not already_added:
+                    assistant.messages.append(message_with_tool_calls)
+                
+                # Add tool calls to current_tool_calls for processing
+                for tool_call in accumulated_tool_calls:
+                    assistant.current_tool_calls.append({
+                        "id": tool_call["id"],
+                        "name": tool_call["function"]["name"],
+                        "args": tool_call["function"]["arguments"],
+                        "status": "pending",
+                        "result": None
+                    })
                     
         except Exception as e:
             print(f"{Fore.RED}LiteLLM completion error: {str(e)}{Style.RESET_ALL}")

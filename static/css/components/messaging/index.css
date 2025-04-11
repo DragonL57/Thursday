@@ -46,3 +46,72 @@
     max-width: 100%; /* Set max-width to 100% instead of a fixed value */
     align-self: stretch; /* Make it stretch to full width */
 }
+
+/* Chat header styles */
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--background-color);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.chat-header-actions {
+    display: flex;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.export-pdf-button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    pointer-events: auto !important; /* Ensure button remains clickable */
+    opacity: 1 !important; /* Ensure button remains visible */
+    position: relative;
+    z-index: 100;
+}
+
+.export-pdf-button:hover {
+    background-color: var(--primary-color-dark);
+    opacity: 1 !important;
+    transform: translateY(-1px);
+}
+
+.export-pdf-button .material-icons-round {
+    font-size: 18px;
+}
+
+.export-pdf-button:active {
+    transform: translateY(1px);
+}
+
+/* Ensure active state is visible */
+.export-pdf-button:focus {
+    outline: 2px solid rgba(var(--primary-color-rgb), 0.5);
+    outline-offset: 2px;
+}
+
+/* Media query for mobile displays */
+@media (max-width: 768px) {
+    .export-pdf-button .button-text {
+        display: none;
+    }
+    
+    .export-pdf-button {
+        padding: 8px;
+    }
+}

@@ -41,7 +41,7 @@ class Assistant:
         name: str = "Assistant",
         tools: list[Callable] = [],
         system_instruction: str = "",
-        stream_handler: bool = False
+        stream_handler: bool = True  # Default to True to always use streaming
     ) -> None:
         """
         Initialize an Assistant instance.
@@ -51,7 +51,7 @@ class Assistant:
             name: Display name for the assistant
             tools: List of callable functions to make available to the assistant
             system_instruction: System prompt for the assistant
-            stream_handler: Whether to enable streaming response handling
+            stream_handler: Whether to enable streaming response handling (default is True)
         """
         self.model = model
         self.name = name
@@ -77,7 +77,6 @@ class Assistant:
         self.image_data = []  # Track images in the current message
         
         # Streaming support
-        self.stream_handler = stream_handler
         self.is_processing = False
         self._processing_thread = None
         self._final_response = None
@@ -99,8 +98,8 @@ class Assistant:
         # No need for Pollinations API client
         self.api_client = None
         
-        # Initialize streaming handler
-        self.stream_handler = StreamHandler(self)
+        # Initialize streaming handler (always enable for consistency)
+        self.stream_handler = StreamHandler(self) if stream_handler else None
 
         # Add system instruction if provided
         if system_instruction:
@@ -130,8 +129,7 @@ class Assistant:
 
     def prepare_message(self, message, images=None):
         """
-                    }
-        This starts a background thread for processing.
+        Prepare a message for processing.
         
         Args:
             message: The text message to send
@@ -204,7 +202,7 @@ class Assistant:
     
     def send_message(self, message, images=None):
         """
-        Send a message and get the response (non-streaming mode).
+        Send a message and get the response (uses streaming internally for consistency).
         
         Args:
             message: The text message to send
@@ -240,39 +238,25 @@ class Assistant:
         else:
             # Add simple text message
             self.messages.append({"role": "user", "content": message})
-            
-        # All requests now use LiteLLM
-        try:
-            # Preprocess messages if needed for certain model types
-            processed_messages = preprocess_messages_for_litellm(self.messages, self.model)
-            
-            response = litellm.completion(
-                model=self.model,
-                messages=processed_messages,
-                tools=self.tools,
-                temperature=conf.TEMPERATURE,
-                top_p=conf.TOP_P,
-                max_tokens=conf.MAX_TOKENS,
-                seed=conf.SEED,
-                safety_settings=conf.SAFETY_SETTINGS
-            )
-        except Exception as e:
-            print(f"Error in API call: {e}")
-            # Return an error response
-            return {
-                "text": f"Sorry, I encountered an error while processing your request: {str(e)}",
-                "tool_calls": self.current_tool_calls
-            }
         
-        # Process the response and return both text and tool calls
-        result = process_tool_calls(self, response)
+        # Create a container to collect the final response
+        collected_response = {"text": "", "tool_calls": []}
         
-        # If result is just a string, return it as is for backward compatibility
-        if isinstance(result, str):
-            return {"text": result, "tool_calls": self.current_tool_calls}
+        # Define a callback to collect the response from the stream
+        def collect_response(event):
+            if event["event"] == "token":
+                collected_response["text"] += event["data"]
+            elif event["event"] == "tool_call":
+                # Keep track of tool calls
+                collected_response["tool_calls"].append(event["data"])
+            elif event["event"] == "final":
+                collected_response["text"] = event["data"]  # Replace with complete text
         
-        # Otherwise return the structured response
-        return result
+        # Use the stream handler to process the message
+        for _ in self.stream_handler.stream_send_message(message, self.image_data, collect_response):
+            pass  # Process all stream events
+        
+        return collected_response
 
     def update_provider(self, provider: str, model: str = None):
         """
@@ -303,10 +287,10 @@ class Assistant:
         """Print a formatted assistant message to the console."""
         formatted_msg = msg.strip() if msg else ""
         
-        print(f"{Fore.YELLOW}┌{'─' * self.border_width}┐{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}│{Style.RESET_ALL} {Fore.GREEN}{self.name}:{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}┌{'─' * self.border_width}┐{Style.RESETALL}")
+        print(f"{Fore.YELLOW}│{Style.RESETALL} {Fore.GREEN}{self.name}:{Style.RESETALL}")
         self.console.print(Markdown(formatted_msg))
-        print(f"{Fore.YELLOW}└{'─' * self.border_width}┘{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}└{'─' * self.border_width}┘{Style.RESETALL}")
 
     def add_msg_assistant(self, msg: str):
         """Add an assistant message to the conversation history."""
@@ -347,10 +331,10 @@ class Assistant:
                 pickle.dump(self.messages, f)
 
             print(
-                f"{Fore.GREEN}Chat session saved to {Fore.BLUE}{final_path}{Style.RESET_ALL}"
+                f"{Fore.GREEN}Chat session saved to {Fore.BLUE}{final_path}{Style.RESETALL}"
             )
         except Exception as e:
-            print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
+            print(f"{Fore.RED}Error: {e}{Style.RESETALL}")
 
     @cmd(["load"], "Loads a chat session from a pickle file. Resets the session.")
     def load_session(self, name: str, filepath=f"chats"):
@@ -366,14 +350,14 @@ class Assistant:
             with open(final_path, "rb") as f:
                 self.messages = pickle.load(f)
             print(
-                f"{Fore.GREEN}Chat session loaded from {Fore.BLUE}{final_path}{Style.RESET_ALL}"
+                f"{Fore.GREEN}Chat session loaded from {Fore.BLUE}{final_path}{Style.RESETALL}"
             )
         except FileNotFoundError:
             print(
-                f"{Fore.RED}Chat session not found{Style.RESET_ALL} {Fore.BLUE}{final_path}{Style.RESET_ALL}"
+                f"{Fore.RED}Chat session not found{Style.RESETALL} {Fore.BLUE}{final_path}{Style.RESETALL}"
             )
         except Exception as e:
-            print(f"{Fore.RED}Error: {e}{Style.RESET_ALL}")
+            print(f"{Fore.RED}Error: {e}{Style.RESETALL}")
 
     @cmd(["reset"], "Resets the chat session.")
     def reset_session(self):
@@ -408,17 +392,17 @@ class Assistant:
         """
         # Process images based on the model type
         if images:
-            print(f"{Fore.CYAN}Processing images for model (streaming): {self.model}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}Processing images for model (streaming): {self.model}{Style.RESETALL}")
             
             # Process images differently based on model
             if self.model.startswith('gemini/'):
                 # Gemini needs specific image formatting
                 processed_images = process_image_for_gemini(images)
-                print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESETALL}")
             else:
                 # GitHub and other models use standard format
                 processed_images = process_image_for_github(images)
-                print(f"{Fore.GREEN}Processed images for GitHub/standard model{Style.RESET_ALL}")
+                print(f"{Fore.GREEN}Processed images for GitHub/standard model{Style.RESETALL}")
             
             # Pass the processed images to the stream handler
             return self.stream_handler.stream_send_message(message, processed_images, callback)

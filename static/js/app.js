@@ -5,6 +5,7 @@ import { MessagingComponent } from './components/messaging/index.js';
 import { ThemeManager } from './components/theme.js';
 import { SettingsManager } from './components/settings.js';
 import { ModelSelector } from './components/ModelSelector.js'; // Add this import
+import { PDFExporter } from './utils/pdfExport.js';
 
 // Initialize the app when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -32,7 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
         attachButton: document.getElementById('attachButton'),
         newChatButton: document.querySelector('.new-chat-icon'),
         chatHistory: document.querySelector('.chat-history'),
-        newChatHeaderButton: document.querySelector('.new-chat-button')
+        newChatHeaderButton: document.querySelector('.new-chat-button'),
+        exportPdfButton: document.getElementById('exportPdfButton')
     };
     
     // Create theme manager instance
@@ -271,6 +273,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    // Add event listener for PDF export button
+    const exportPdfButton = document.getElementById('exportPdfButton');
+    if (exportPdfButton) {
+        exportPdfButton.addEventListener('click', () => {
+            const messagesContainer = document.getElementById('messages');
+            if (messagesContainer) {
+                const pdfExporter = new PDFExporter(messagesContainer);
+                pdfExporter.exportToPDF();
+            } else {
+                console.error('Messages container not found for PDF export');
+            }
+        });
+    }
 });
 
 // Check if any required elements are missing

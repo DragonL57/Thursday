@@ -507,7 +507,7 @@ def chat_stream():
 
 @chat_bp.route('', methods=['POST'])
 def chat():
-    """Legacy non-streaming API endpoint for backward compatibility."""
+    """Legacy non-streaming API endpoint that now uses streaming internally for consistency."""
     if not current_app.assistant:
         return jsonify({"error": "Assistant not initialized"}), 500
 
@@ -531,33 +531,17 @@ def chat():
         
         user_assistant = current_app.assistants[session_id]
         
-        # Prepare image data if provided
-        images = None
-        if image_data:
-            # Create the content array format required by the API
-            images = [{
-                "type": "image_url",
-                "image_url": {
-                    "url": image_data
-                }
-            }]
+        # Send message using the streaming method internally
+        assistant_response = user_assistant.send_message(user_message, image_data)
         
-        # Send message to the assistant and get the response
-        assistant_response = user_assistant.send_message(user_message, images)
-        
-        # Format response for the client
-        if isinstance(assistant_response, dict) and "text" in assistant_response:
-            # New format with text and tool calls
-            return jsonify({
-                "response": assistant_response["text"],
-                "tool_calls": assistant_response.get("tool_calls", [])
-            })
-        else:
-            # Fallback for backward compatibility
-            return jsonify({"response": assistant_response})
+        # Format response for the client - the send_message method now returns a structured response
+        return jsonify({
+            "response": assistant_response["text"],
+            "tool_calls": assistant_response.get("tool_calls", [])
+        })
     except Exception as e:
         print(f"Error during chat processing: {e}")
-        # Potentially log the full traceback here
+        traceback.print_exc()
         return jsonify({"error": "An internal error occurred"}), 500
 
 @chat_bp.route('/reset', methods=['POST'])

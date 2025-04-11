@@ -1,0 +1,55 @@
+/* Print-specific styles */
+
+@media print {
+    /* Hide elements we don't want to print */
+    .sidebar,
+    .chat-input-container,
+    .chat-header,
+    .sidebar-toggle,
+    .loading-indicator,
+    .copy-markdown-button,
+    .retry-button {
+        display: none !important;
+    }
+    
+    /* Ensure the chat container takes full width */
+    .chat-container {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+    
+    /* Ensure messages container is not restricted */
+    .messages-container {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    
+    /* Add page breaks where appropriate */
+    .message-group {
+        page-break-inside: avoid;
+    }
+    
+    /* Ensure proper margins and spacing */
+    body {
+        margin: 1cm !important;
+    }
+    
+    /* Reset backgrounds for better printing */
+    body, .app-container, .app-body {
+        background: transparent !important;
+    }
+    
+    /* Make sure text is black for printing */
+    .dark-mode {
+        color: #000 !important;
+    }
+    
+    /* Handle code blocks better for printing */
+    pre, code {
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+    }
+}
