@@ -275,7 +275,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         # Just log to console instead
         print("Getting next response after tool execution...")
         
-        # Use litellm for completion without streaming (for tool processing)
+        # Use litellm for completion with streaming for tool processing
         import litellm
         import config as conf
         
@@ -305,6 +305,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
             "max_tokens": conf.MAX_TOKENS,
             "seed": conf.SEED,
             "tool_choice": "auto",  # This is important to enable tool selection
+            "stream": True  # Always enable streaming for consistent behavior
         }
         safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
         if safety_settings:
@@ -319,9 +320,13 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         base_retry_delay = 1  # Base delay in seconds
         max_retry_delay = 3  # Maximum retry delay in seconds
         
+        # Inform the user we're processing the tool results
+        if tool_event_callback and recursion_depth == 0:
+            for chunk in tool_event_callback("info", "Processing results and generating response...", False):
+                yield chunk
+        
         # Initialize retry variables
         retry_count = 0
-        next_response = None
         last_error = None
         
         while retry_count <= max_retries:
@@ -339,18 +344,62 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
                     
                     time.sleep(delay)  # Wait before retrying
                 
-                next_response = litellm.completion(**completion_args)
-                print(f"Follow-up API call successful. Response type: {type(next_response)}")
+                # Use streaming for recursive calls
+                stream = litellm.completion(**completion_args)
+                print(f"Follow-up API streaming initialized. Processing stream...")
                 
-                # Debug the response content - make this more robust with defensive checks
-                if isinstance(next_response, dict) and "choices" in next_response and next_response["choices"]:
-                    message = next_response["choices"][0].get("message", {})
-                    content = message.get("content", "")
-                    tool_calls = message.get("tool_calls")
-                    print(f"Follow-up response content: {content[:100]}...")
-                    print(f"Follow-up response has {len(tool_calls) if tool_calls else 0} tool calls")
-                else:
-                    print(f"WARNING: Follow-up response format: {type(next_response)}")
+                # Process the stream here directly to enable real-time streaming
+                accumulated_content = ""
+                accumulated_tool_calls = []
+                final_chunk = None
+                
+                for chunk in stream:
+                    # Process each chunk from the stream
+                    chunk_content = chunk.choices[0].delta.content
+                    chunk_tool_calls = chunk.choices[0].delta.tool_calls
+                    
+                    if chunk_content:
+                        accumulated_content += chunk_content
+                        # Stream token in real-time
+                        if tool_event_callback:
+                            for event in tool_event_callback("token", chunk_content):
+                                yield event
+                    
+                    if chunk_tool_calls:
+                        # Process tool calls from the stream (similar to chat_routes.py)
+                        for tool_call_delta in chunk_tool_calls:
+                            index = tool_call_delta.index
+                            if index >= len(accumulated_tool_calls):
+                                # New tool call started
+                                accumulated_tool_calls.append({
+                                    "id": tool_call_delta.id or f"tool_{index}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_call_delta.function.name or "",
+                                        "arguments": tool_call_delta.function.arguments or ""
+                                    }
+                                })
+                            else:
+                                # Append to existing tool call
+                                if tool_call_delta.function.name:
+                                    accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
+                                if tool_call_delta.function.arguments:
+                                    accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
+                    
+                    final_chunk = chunk  # Keep track of the last chunk
+                
+                # Create the next_response object from accumulated data
+                next_response = {
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": accumulated_content,
+                            **({"tool_calls": accumulated_tool_calls} if accumulated_tool_calls else {})
+                        },
+                        "finish_reason": final_chunk.choices[0].finish_reason if final_chunk else "stop"
+                    }],
+                    "model": assistant.model
+                }
                 
                 # Successful call, break out of retry loop
                 break
@@ -380,7 +429,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
                 print(f"{Fore.YELLOW}Error during follow-up LiteLLM API call (will retry): {e}{Style.RESET_ALL}")
         
         # If we've exhausted all retries without success
-        if next_response is None:
+        if 'next_response' not in locals():
             raise Exception(f"API call failed after {max_retries} retries. Last error: {last_error}")
         
         # Process the new response recursively, incrementing the recursion depth
@@ -405,46 +454,8 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         if final_text is not None:
             yield {"final_text": final_text}
             
-            # Only yield token events once at the last recursion level, not for every level
-            # This prevents duplicated final responses
-            if tool_event_callback and recursion_depth == 0:
-                for chunk in tool_event_callback("token", final_text):
-                    yield chunk
+        # No need to yield token events here as they're already streamed in real-time above
             
-        # If we didn't get a final text but have content from the follow-up response, create one
-        elif hasattr(next_response, 'choices') and next_response.choices and recursion_depth > 0:
-            # Try to extract content from object-style responses
-            try:
-                message = getattr(next_response.choices[0], 'message', None)
-                if message and hasattr(message, 'content') and message.content:
-                    print(f"Extracted content from follow-up response: {message.content[:100]}...")
-                    final_text = message.content
-                    yield {"final_text": final_text}
-                    
-                    # Only yield token events once at the last recursion level
-                    if tool_event_callback and recursion_depth == 0:
-                        for chunk in tool_event_callback("token", final_text):
-                            yield chunk
-                    
-                    # Also add to assistant messages if it's not already there
-                    if message.content and not any(m.get('content') == message.content for m in assistant.messages[-3:] if m.get('role') == 'assistant'):
-                        assistant.messages.append({
-                            "role": "assistant",
-                            "content": message.content
-                        })
-                        assistant._final_response = message.content
-            except Exception as e:
-                print(f"Error extracting content from follow-up response: {e}")
-                # If extraction fails but we have a tool result, use it as a fallback
-                if assistant.messages and assistant.messages[-1].get('role') == 'tool':
-                    tool_content = assistant.messages[-1].get('content', '')
-                    fallback = f"I found that the current time is {tool_content}."
-                    yield {"final_text": fallback}
-                    
-                    # Only yield token events once at the last recursion level
-                    if tool_event_callback and recursion_depth == 0:
-                        for chunk in tool_event_callback("token", fallback):
-                            yield chunk
     except Exception as e:
         print(f"{Fore.RED}Error in recursive tool call: {e}. Returning partial results.{Style.RESET_ALL}")
         import traceback
@@ -453,7 +464,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         fallback = "Error processing follow-up response. Here's what I know so far."
         yield {"final_text": fallback}
         
-        # Only yield token events once at the last recursion level
+        # Stream fallback message if at root recursion level
         if tool_event_callback and recursion_depth == 0:
             for chunk in tool_event_callback("token", fallback):
                 yield chunk

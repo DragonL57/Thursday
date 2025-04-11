@@ -353,6 +353,9 @@ class StreamHandler:
         # Reset state for new stream
         self.stream_abort = False
         
+        # Reset the streaming flag on the assistant
+        assistant._streamed_final_response = False
+        
         # Process any provided images
         formatted_images = self._prepare_images(images)
         
@@ -502,102 +505,140 @@ class StreamHandler:
             # Debug info
             print(f"{Fore.CYAN}Starting LiteLLM stream with model: {assistant.model}{Style.RESET_ALL}")
             
-            # Start the stream
-            stream = litellm.completion(**completion_args)
+            # Add retry logic for empty responses
+            max_empty_retries = 3
+            retry_count = 0
+            content_received = False
             
-            # Process the stream
-            accumulated_content = ""
-            accumulated_tool_calls = []
-            last_content = None
-            
-            for chunk in stream:
-                # Check if streaming was aborted
-                if self.stream_abort:
-                    print("Stream aborted by user")
+            while retry_count < max_empty_retries:
+                if retry_count > 0:
+                    # Inform the user about the retry
+                    retry_msg = f"No response received, retrying... (attempt {retry_count + 1}/{max_empty_retries})"
+                    print(f"{Fore.YELLOW}{retry_msg}{Style.RESET_ALL}")
+                    if callback:
+                        callback({"event": "info", "data": retry_msg})
+                    
+                    # Slightly increase temperature on retries to encourage different responses
+                    completion_args['temperature'] = min(1.0, (completion_args.get('temperature', 0.7) + 0.1))
+                
+                # Start the stream
+                stream = litellm.completion(**completion_args)
+                
+                # Process the stream
+                accumulated_content = ""
+                accumulated_tool_calls = []
+                last_content = None
+                chunk_count = 0
+                
+                for chunk in stream:
+                    chunk_count += 1
+                    # Check if streaming was aborted
+                    if self.stream_abort:
+                        print("Stream aborted by user")
+                        break
+                    
+                    if not hasattr(chunk, 'choices') or len(chunk.choices) == 0:
+                        continue
+                    
+                    choice = chunk.choices[0]
+                    
+                    # Extract content if present
+                    delta_content = None
+                    try:
+                        delta_content = choice.delta.content
+                    except (AttributeError, KeyError):
+                        pass
+                    
+                    # Process content if present
+                    if delta_content:
+                        content_received = True  # Mark that we received some content
+                        # Deduplicate identical tokens that sometimes occur in streams
+                        if delta_content != last_content:
+                            accumulated_content += delta_content
+                            yield {"event": "token", "data": delta_content}
+                            
+                            # Call the callback if provided
+                            if callback:
+                                callback({"event": "token", "data": delta_content})
+                                
+                            last_content = delta_content
+                    
+                    # Process tool calls if present
+                    try:
+                        if choice.delta.tool_calls:
+                            content_received = True  # Tool calls also count as content
+                            for tool_call_delta in choice.delta.tool_calls:
+                                # Process tool call data
+                                index = tool_call_delta.index
+                                
+                                # Handle new tool call
+                                if index >= len(accumulated_tool_calls):
+                                    accumulated_tool_calls.append({
+                                        "id": tool_call_delta.id or f"tool_{index}",
+                                        "type": "function",
+                                        "function": {
+                                            "name": tool_call_delta.function.name or "",
+                                            "arguments": tool_call_delta.function.arguments or ""
+                                        }
+                                    })
+                                else:
+                                    # Append to existing tool call
+                                    if tool_call_delta.function and tool_call_delta.function.name:
+                                        accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
+                                    if tool_call_delta.function and tool_call_delta.function.arguments:
+                                        accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
+                                        
+                                # Check if we have a complete tool call that we can yield
+                                if (accumulated_tool_calls[index]["function"]["name"] and
+                                    accumulated_tool_calls[index]["function"]["arguments"] and
+                                    accumulated_tool_calls[index]["function"]["arguments"].strip().endswith('}')):
+                                    try:
+                                        # Parse the arguments as JSON to validate completeness
+                                        args_str = accumulated_tool_calls[index]["function"]["arguments"]
+                                        if args_str.strip():
+                                            json.loads(args_str)
+                                            
+                                        # Create tool call data format compatible with UI expectations
+                                        tool_data = {
+                                            "id": accumulated_tool_calls[index]["id"],
+                                            "name": accumulated_tool_calls[index]["function"]["name"],
+                                            "args": accumulated_tool_calls[index]["function"]["arguments"],
+                                            "status": "pending",
+                                            "result": None
+                                        }
+                                        
+                                        # Yield the tool call event
+                                        yield {"event": "tool_call", "data": tool_data}
+                                        
+                                        # Call the callback if provided
+                                        if callback:
+                                            callback({"event": "tool_call", "data": tool_data})
+                                            
+                                    except json.JSONDecodeError:
+                                        # Arguments not complete yet, keep accumulating
+                                        pass
+                    except (AttributeError, KeyError):
+                        pass
+                
+                # Check if we received any content
+                if content_received:
+                    # We got content, process it and break the retry loop
                     break
-                    
-                if not hasattr(chunk, 'choices') or len(chunk.choices) == 0:
+                elif chunk_count == 0:
+                    # No chunks received at all, likely an API error
+                    print(f"{Fore.RED}No response chunks received from API{Style.RESET_ALL}")
+                    retry_count += 1
+                    if retry_count >= max_empty_retries:
+                        raise Exception("Failed to get any response after multiple retries")
                     continue
-                    
-                choice = chunk.choices[0]
+                else:
+                    # Got chunks but no content, might be incomplete response
+                    print(f"{Fore.YELLOW}Got {chunk_count} chunks but no content{Style.RESET_ALL}")
+                    retry_count += 1
+                    if retry_count >= max_empty_retries:
+                        raise Exception("Received empty responses after multiple retries")
+                    continue
                 
-                # Extract content if present
-                delta_content = None
-                try:
-                    delta_content = choice.delta.content
-                except (AttributeError, KeyError):
-                    pass
-                    
-                # Process content if present
-                if delta_content:
-                    # Deduplicate identical tokens that sometimes occur in streams
-                    if delta_content != last_content:
-                        accumulated_content += delta_content
-                        yield {"event": "token", "data": delta_content}
-                        
-                        # Call the callback if provided
-                        if callback:
-                            callback({"event": "token", "data": delta_content})
-                            
-                        last_content = delta_content
-                
-                # Process tool calls if present
-                try:
-                    if choice.delta.tool_calls:
-                        for tool_call_delta in choice.delta.tool_calls:
-                            # Process tool call data
-                            index = tool_call_delta.index
-                            
-                            # Handle new tool call
-                            if index >= len(accumulated_tool_calls):
-                                accumulated_tool_calls.append({
-                                    "id": tool_call_delta.id or f"tool_{index}",
-                                    "type": "function",
-                                    "function": {
-                                        "name": tool_call_delta.function.name or "",
-                                        "arguments": tool_call_delta.function.arguments or ""
-                                    }
-                                })
-                            else:
-                                # Append to existing tool call
-                                if tool_call_delta.function and tool_call_delta.function.name:
-                                    accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
-                                if tool_call_delta.function and tool_call_delta.function.arguments:
-                                    accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
-                                    
-                            # Check if we have a complete tool call that we can yield
-                            if (accumulated_tool_calls[index]["function"]["name"] and
-                                accumulated_tool_calls[index]["function"]["arguments"] and
-                                accumulated_tool_calls[index]["function"]["arguments"].strip().endswith('}')):
-                                # We have a complete tool call - prepare it for yielding
-                                try:
-                                    # Parse the arguments as JSON to validate completeness
-                                    args_str = accumulated_tool_calls[index]["function"]["arguments"]
-                                    if args_str.strip():
-                                        json.loads(args_str)
-                                        
-                                    # Create tool call data format compatible with UI expectations
-                                    tool_data = {
-                                        "id": accumulated_tool_calls[index]["id"],
-                                        "name": accumulated_tool_calls[index]["function"]["name"],
-                                        "args": accumulated_tool_calls[index]["function"]["arguments"],
-                                        "status": "pending",
-                                        "result": None
-                                    }
-                                    
-                                    # Yield the tool call event
-                                    yield {"event": "tool_call", "data": tool_data}
-                                    
-                                    # Call the callback if provided
-                                    if callback:
-                                        callback({"event": "tool_call", "data": tool_data})
-                                        
-                                except json.JSONDecodeError:
-                                    # Arguments not complete yet, keep accumulating
-                                    pass
-                except (AttributeError, KeyError):
-                    pass
-                    
             # Process the end of stream
             if accumulated_content:
                 # Add the assistant's response to the conversation history if it's not already there
@@ -612,6 +653,9 @@ class StreamHandler:
                 
                 # Set the final response
                 assistant._final_response = accumulated_content
+                
+                # Mark that we've streamed the final response
+                assistant._streamed_final_response = True
                 
                 # Send final event
                 yield {"event": "final", "data": accumulated_content}

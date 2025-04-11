@@ -60,6 +60,10 @@ class Assistant:
         
         # Update the available_functions handling to support both callables and dictionaries
         self.available_functions = {}
+        
+        # Flag to track if final response has been streamed
+        self._streamed_final_response = False
+        
         for func in tools:
             if callable(func):
                 self.available_functions[func.__name__] = func

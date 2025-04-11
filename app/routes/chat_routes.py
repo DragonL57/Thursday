@@ -447,17 +447,30 @@ def chat_stream():
                                 yield direct_event
                 
                 # Define a wrapper function to capture and immediately emit tool events
-                def tool_event_handler(event_type, data, *args):
-                    # Filter out certain info messages to prevent them from appearing in the UI
-                    if event_type == "info" and data == "Getting next response after tool execution...":
-                        # Skip sending this to the UI, but still log it
-                        print(f"Tool execution info: {data}")
+                def tool_event_handler(event_type, data, is_temp=False):
+                    # Filter out processing and tool execution messages
+                    if event_type == "info" and (
+                        data == "Getting next response after tool execution..." or
+                        data == "Processing results and generating response..." or
+                        data.startswith("Processing tool") or
+                        "tool execution" in data.lower()
+                    ):
+                        # Skip sending these to the UI, but still log them
+                        print(f"Tool processing info: {data}")
                         return []  # Return empty generator to avoid yielding anything
                     
-                    # Accept additional args but ignore them - makes function compatible with all calling patterns
-                    event = f"data: {json.dumps({'event': event_type, 'data': data})}\n\n"
+                    # Handle temporary info messages
+                    event_data = {
+                        "event": event_type,
+                        "data": data
+                    }
+                    if is_temp:
+                        event_data["temp"] = True
+                        
+                    # Construct the event data
+                    event = f"data: {json.dumps(event_data)}\n\n"
                     yield event
-                
+
                 # Process the response with tool handler - now returns a generator, not a dict
                 tool_events_generator = process_tool_calls(
                     user_assistant,
@@ -481,9 +494,24 @@ def chat_stream():
                 # Restore original function
                 formatting.tool_report_print = original_print
                 
-                # Stream the final response if we have text (only for non-LiteLLM providers)
-                if final_text and user_assistant.provider != 'litellm':
-                    yield f"data: {json.dumps({'event': 'token', 'data': final_text})}\n\n"
+                # Stream the final response if we have text and it hasn't already been streamed by the tool handler
+                # This is mainly for non-LiteLLM providers since the LiteLLM-based providers now stream in real-time
+                if final_text and user_assistant.provider != 'litellm' and not user_assistant._streamed_final_response:
+                    # Set the final response in the assistant
+                    user_assistant._final_response = final_text
+                    
+                    # Add to conversation history if it's not already there
+                    if not any(msg.get("role") == "assistant" and msg.get("content") == final_text for msg in user_assistant.messages[-3:]):
+                        user_assistant.messages.append({
+                            "role": "assistant",
+                            "content": final_text
+                        })
+                    
+                    # Stream the response token by token for consistent behavior
+                    for token in chunk_text(final_text, 3):  # Smaller chunk size for more responsive streaming
+                        yield f"data: {json.dumps({'event': 'token', 'data': token})}\n\n"
+                    
+                    # Send final event with complete text
                     yield f"data: {json.dumps({'event': 'final', 'data': final_text})}\n\n"
                 
             except Exception as e:
