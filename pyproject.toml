@@ -29,7 +29,8 @@ dependencies = [
     "pdfplumber",
     "sshuttle",
     "selenium>=4.10.0",
-    "webdriver-manager>=4.0.0"
+    "webdriver-manager>=4.0.0",
+    "scrapy"
 ]
 
 [dependency-groups]

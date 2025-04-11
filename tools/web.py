@@ -6,10 +6,12 @@ import random
 import time
 import io
 import requests
+import asyncio
+import aiohttp
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from duckduckgo_search.exceptions import DuckDuckGoSearchException, RatelimitException, TimeoutException
-from typing import List, Dict, Union, Optional  # Add typing imports
+from typing import List, Dict, Union, Optional, Tuple, Any  # Add typing imports
 from urllib.parse import urlparse, urljoin
 
 from .formatting import tool_message_print, tool_report_print
@@ -26,7 +28,55 @@ try:
 except ImportError:
     SELENIUM_AVAILABLE = False
 
+# Try to import Scrapy for advanced scraping capabilities
+try:
+    import scrapy
+    from scrapy import Selector
+    SCRAPY_AVAILABLE = True
+except ImportError:
+    SCRAPY_AVAILABLE = False
+
 DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+
+# Create a list of realistic user agents to rotate
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/133.0.2623.0 Safari/537.36",
+    "Mozilla/5.0 (iPad; CPU OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+]
+
+# Dictionary to track websites that are likely to need JavaScript rendering
+JS_REQUIRED_SITES = {}
+
+# Let's remember which sites need headless browser vs standard requests
+SITE_CAPABILITIES = {}
+
+# Add proxy rotation capabilities
+PROXY_LIST = []  # Can be populated from a file or service if needed
+
+# Content extraction modes
+EXTRACT_MODES = {
+    "text": "Extract plain text content",
+    "markdown": "Extract content preserving basic markdown formatting",
+    "html": "Return cleaned HTML content",
+    "structured": "Extract structured data from the page (article title, content, author, date)",
+    "links": "Extract all links from the page"
+}
+
+# Common website parsers for popular sites
+SITE_SPECIFIC_PARSERS = {
+    "youtube.com": "parse_youtube",
+    "twitter.com": "parse_twitter",
+    "x.com": "parse_twitter",
+    "reddit.com": "parse_reddit",
+    "github.com": "parse_github",
+    "medium.com": "parse_medium",
+    "news.ycombinator.com": "parse_hacker_news"
+}
 
 def web_search(
     query: str, 
@@ -401,7 +451,7 @@ def read_website_content(
                     if main_content and main_content.find('iframe'):
                         # Need to retrieve the iframe source
                         iframe_src = main_content.find('iframe').get('src')
-                        if iframe_src:
+                        if (iframe_src):
                             if iframe_src.startswith('http'):
                                 full_url = iframe_src
                             else:
