@@ -23,6 +23,7 @@ export class ToolCallHandler {
             messageContainer.setAttribute('data-placement', 'after-user');
             messageContainer.setAttribute('data-tool-container', 'true');
             messageContainer.setAttribute('data-no-copy', 'true');
+            messageContainer.setAttribute('data-container-id', `tool-container-${Date.now()}`); // Add unique ID
             
             const contentContainer = document.createElement('div');
             contentContainer.className = 'message-content-container';
@@ -38,6 +39,7 @@ export class ToolCallHandler {
             list.className = 'tool-list';
             list.setAttribute('data-has-header', 'true');
             list.setAttribute('data-no-copy', 'true');
+            list.setAttribute('data-list-id', `tool-list-${Date.now()}`); // Add unique ID
             
             // Create an explicit header element that will always be visible
             const header = document.createElement('div');
@@ -78,6 +80,8 @@ export class ToolCallHandler {
             // Store references
             this.currentMessageContainer = messageContainer;
             this.currentToolsList = list;
+            
+            console.log('New tool container created with ID:', messageContainer.getAttribute('data-container-id'));
             
             // Apply immediate cleanup to remove any copy buttons that might have been added
             this.removeCopyButtonsFromToolMessages(messageContainer, true);
@@ -306,7 +310,12 @@ export class ToolCallHandler {
         if (!toolCall?.id) return null;
         
         const container = document.getElementById(`tool-${toolCall.id}`);
-        if (!container) return this.addToolCallToList(toolCall);
+        if (!container) {
+            console.log(`Tool container for ${toolCall.id} not found, creating a new one`);
+            return this.addToolCallToList(toolCall);
+        }
+        
+        console.log(`Updating tool in list: ${toolCall.name}, ID: ${toolCall.id}, Status: ${toolCall.status}`);
         
         // This is the currently active tool, make sure it's uncollapsed
         if (toolCall.id === this.lastAddedToolId && toolCall.status === 'pending') {
@@ -317,6 +326,7 @@ export class ToolCallHandler {
         // Update status
         if (toolCall.status) {
             container.setAttribute('data-status', toolCall.status);
+            console.log(`Tool ${toolCall.id} status updated to: ${toolCall.status}`);
             
             // When a tool completes and it's the last added tool,
             // keep it expanded if it has results to show
@@ -340,6 +350,7 @@ export class ToolCallHandler {
                 result.classList.remove('hidden');
                 
                 let content = toolCall.result.toString();
+                console.log(`Tool ${toolCall.id} has result content of length: ${content.length}`);
                 
                 // Special handling for note tools to show actual content
                 if (toolCall.name === 'add_note' || toolCall.name === 'update_note' || toolCall.name === 'get_notes') {
@@ -411,6 +422,8 @@ export class ToolCallHandler {
                 } catch (e) {
                     console.warn('Error applying syntax highlighting:', e);
                 }
+            } else {
+                console.warn(`Tool ${toolCall.id} result element not found`);
             }
         }
         
@@ -427,6 +440,10 @@ export class ToolCallHandler {
                 element: container,
                 data: {...this.toolCalls.get(toolCall.id).data, ...toolCall}
             });
+        } else {
+            // If missing from our tracking, add it
+            this.toolCalls.set(toolCall.id, { element: container, data: toolCall });
+            console.log(`Added missing tool ${toolCall.id} to tracking map`);
         }
         
         // Check if all tools are completed or have errors
@@ -676,17 +693,18 @@ export class ToolCallHandler {
     
     // Reset the tools list for a new conversation turn
     resetToolsList() {
-        console.log('Preserving tool list for continuity');
+        console.log('Creating fresh tool list for new conversation turn');
         
         // Reset tracking variables
         this.isFinalResponseGenerating = false;
         this.lastAddedToolId = null;
         
-        // Instead of removing, we'll just reset tracking variables
-        // but leave the DOM elements in place
+        // Important: Clear references to allow creation of new containers
+        // This ensures each conversation turn gets its own tool container
         this.currentToolsList = null;
         this.currentMessageContainer = null;
-        // Keep the Map of tool calls to maintain history
+        
+        // We don't clear the Map of tool calls since those IDs should be unique across turns
     }
     
     // Method to ensure proper positioning of tool list
