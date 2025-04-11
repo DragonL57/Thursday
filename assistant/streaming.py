@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Callable, Iterator, Union, Any
 from colorama import Fore, Style
 
 import litellm
-from .image_processor import optimize_images, process_image_for_gemini, process_image_for_github
+from .image_processor import optimize_images, process_image_for_gemini
 
 class StreamHandler:
     """
@@ -375,11 +375,8 @@ class StreamHandler:
             # Yield the start event
             yield {"event": "start"}
             
-            # Generate response based on the provider
-            if assistant.provider == 'litellm':
-                yield from self._handle_litellm_streaming(callback)
-            else:  # Use Pollinations API
-                yield from self._handle_pollinations_streaming(callback)
+            # Use LiteLLM for all streaming
+            yield from self._handle_litellm_streaming(callback)
                 
             # Always send done event
             yield {"event": "done"}
@@ -397,38 +394,9 @@ class StreamHandler:
         if not images:
             return None
             
-        # Check provider and model to determine proper formatting
-        provider = self.assistant.provider
-        model = self.assistant.model
-        
-        # Special handling for different model families
-        if provider == 'litellm':
-            if 'gemini' in model:
-                print(f"{Fore.YELLOW}Processing image for Gemini model{Style.RESET_ALL}")
-                return process_image_for_gemini(images)
-            elif 'github' in model:
-                print(f"{Fore.YELLOW}Processing image for GitHub model{Style.RESET_ALL}")
-                processed = process_image_for_github(images)
-                
-                if not processed:
-                    # If image processing fails for GitHub, don't include the image
-                    # and instead append note to the message
-                    print(f"{Fore.YELLOW}GitHub models don't support base64 images - removing image from request{Style.RESET_ALL}")
-                    # Modify the last message to include a note about image support
-                    if self.assistant.messages and len(self.assistant.messages) > 0:
-                        last_message = self.assistant.messages[-1]
-                        if isinstance(last_message.get('content'), str):
-                            note = "\n\n[Note: Images must be provided as public URLs for GitHub models, not as file uploads]"
-                            if not last_message['content'].endswith(note):
-                                last_message['content'] += note
-                
-                return processed
-            else:
-                # Standard optimization for other LiteLLM models
-                return optimize_images(images)
-        else:
-            # Standard optimization for Pollinations
-            return optimize_images(images)
+        # Process all images for Gemini
+        print(f"{Fore.YELLOW}Processing image for Gemini model{Style.RESET_ALL}")
+        return process_image_for_gemini(images)
             
     def _construct_user_message(self, message, images):
         """Construct the user message with text and optional images."""
@@ -436,7 +404,7 @@ class StreamHandler:
             return {"role": "user", "content": message}
             
         # For Gemini with a single image dict
-        if isinstance(images, dict) and self.assistant.provider == 'litellm' and 'gemini' in self.assistant.model:
+        if isinstance(images, dict):
             return {
                 "role": "user", 
                 "content": [
@@ -713,54 +681,4 @@ class StreamHandler:
         except Exception as e:
             print(f"{Fore.RED}LiteLLM completion error: {str(e)}{Style.RESET_ALL}")
             traceback.print_exc()
-            yield {"event": "error", "data": f"API error: {str(e)}"}
-            
-    def _handle_pollinations_streaming(self, callback):
-        """Handle streaming with Pollinations API provider."""
-        assistant = self.assistant
-        
-        # Verify API client is initialized
-        if not assistant.api_client:
-            error = "Pollinations API client not initialized"
-            yield {"event": "error", "data": f"API error: {error}"}
-            return
-        
-        try:
-            # Start streaming
-            api_stream = assistant.api_client.stream_get_completion(
-                messages=assistant.messages,
-                tools=assistant.tools
-            )
-            
-            # Process the stream
-            for chunk in api_stream:
-                # Check if streaming was aborted
-                if self.stream_abort:
-                    print("Stream aborted by user")
-                    break
-                    
-                # Process content chunks
-                if "content" in chunk:
-                    content = chunk["content"]
-                    yield {"event": "token", "data": content}
-                    
-                    # Call the callback if provided
-                    if callback:
-                        callback({"event": "token", "data": content})
-                        
-            # Add the final message from the API client
-            final_message = assistant.api_client.last_completion_content
-            if final_message:
-                # Add the assistant's response to the conversation history
-                assistant.messages.append({"role": "assistant", "content": final_message})
-                
-                # Final response
-                yield {"event": "final", "data": final_message}
-                
-                # Call the callback with final response
-                if callback:
-                    callback({"event": "final", "data": final_message})
-                    
-        except Exception as e:
-            print(f"{Fore.RED}Pollinations API error: {str(e)}{Style.RESET_ALL}")
             yield {"event": "error", "data": f"API error: {str(e)}"}

@@ -34,7 +34,6 @@ def optimize_images(images):
         print(f"{Fore.CYAN}Found direct base64 string for Gemini{Style.RESET_ALL}")
         return images  # For Gemini, just return the raw base64 string
     
-    # Handle standard OpenAI/GitHub format
     optimized_images = []
     
     # Convert to list if it's not already
@@ -127,61 +126,6 @@ def optimize_images(images):
     
     return optimized_images
 
-def process_image_for_github(image_data):
-    """
-    Process images specifically for GitHub model compatibility
-    
-    Args:
-        image_data: Image data in various formats (string, dict, or list)
-        
-    Returns:
-        Processed image data compatible with GitHub model input format
-    """
-    print(f"{Fore.CYAN}Processing image for GitHub model, input type: {type(image_data)}{Style.RESET_ALL}")
-    
-    # If image_data is None or empty, return None
-    if not image_data:
-        return None
-    
-    try:
-        # Handle direct base64 string from the UI
-        if isinstance(image_data, str) and image_data.startswith('data:image/'):
-            return _process_base64_image_for_github(image_data)
-        
-        # Handle properly formatted dictionary (standard OpenAI format)
-        elif isinstance(image_data, dict):
-            if image_data.get("type") == "image_url" and "image_url" in image_data:
-                url = image_data["image_url"].get("url")
-                if url and isinstance(url, str) and url.startswith('data:image/'):
-                    # Process the base64 URL inside the standard format
-                    processed_base64 = _process_base64_image_for_github(url)
-                    if processed_base64:
-                        return {
-                            "type": "image_url",
-                            "image_url": {"url": processed_base64}
-                        }
-                return image_data  # Return as is if it's already in correct format
-            
-            return _process_dict_image_for_github(image_data)
-            
-        # Handle list input - process only first image
-        elif isinstance(image_data, list) and len(image_data) > 0:
-            print(f"{Fore.CYAN}Processing first image from list of {len(image_data)}{Style.RESET_ALL}")
-            first_item = image_data[0]
-            
-            # If it's already in the right format, just process that one
-            if isinstance(first_item, dict) and first_item.get("type") == "image_url":
-                return process_image_for_github(first_item)
-                
-            return process_image_for_github(first_item)
-        
-        print(f"{Fore.RED}Could not process image data for GitHub - unsupported format{Style.RESET_ALL}")
-        return None
-        
-    except Exception as e:
-        print(f"{Fore.RED}Error in process_image_for_github: {e}{Style.RESET_ALL}")
-        return None
-
 def process_image_for_gemini(image_data):
     """
     Process images specifically for Gemini model compatibility
@@ -266,47 +210,6 @@ def process_image_for_gemini(image_data):
     except Exception as e:
         print(f"{Fore.RED}Error in process_image_for_gemini: {e}{Style.RESET_ALL}")
         return None
-
-def _process_base64_image_for_github(image_data_url):
-    """
-    Process a base64 image data URL for GitHub
-    
-    GitHub models require image URLs, not base64 content directly.
-    Since we can't easily create public URLs, we remove image support
-    and return a message about the limitation.
-    
-    Args:
-        image_data_url: Base64 image data URL
-    
-    Returns:
-        None - GitHub models cannot process base64 images directly
-    """
-    print(f"{Fore.YELLOW}GitHub models do not support base64 encoded images directly{Style.RESET_ALL}")
-    
-    # Inform the system this is unsupported
-    return None
-
-def _process_dict_image_for_github(image_dict):
-    """
-    Process a dictionary containing image data for GitHub
-    
-    Args:
-        image_dict: Dictionary containing image data
-        
-    Returns:
-        None or URL if a valid public URL is found
-    """
-    # Check for a valid URL (not base64)
-    if 'type' in image_dict and image_dict['type'] == 'image_url' and 'image_url' in image_dict:
-        url = image_dict['image_url'].get('url')
-        if url and isinstance(url, str) and not url.startswith('data:'):
-            # If it's already a public URL, we can use it
-            print(f"{Fore.GREEN}Found valid public image URL for GitHub model{Style.RESET_ALL}")
-            return image_dict
-    
-    # For base64 or invalid URLs, return None
-    print(f"{Fore.YELLOW}GitHub models require public image URLs, not base64 data{Style.RESET_ALL}")
-    return None
 
 def _process_base64_image_for_gemini(image_data_url):
     """

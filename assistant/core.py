@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 import config as conf
 from .api_client import preprocess_messages_for_litellm
-from .image_processor import optimize_images, process_image_for_gemini, process_image_for_github
+from .image_processor import optimize_images, process_image_for_gemini
 from .streaming import StreamHandler
 from .tool_handler import process_tool_calls, convert_to_pydantic_model
 from .utils import cmd
@@ -85,21 +85,21 @@ class Assistant:
         self._processing_thread = None
         self._final_response = None
 
-        # Handle specific model providers - all now map to LiteLLM
-        if model == "pollinations-gpt4o" or model == "github-gpt4o" or model == "gpt4o-integrated":
-            if model == "gpt4o-integrated":
-                print("Warning: Using legacy gpt4o-integrated model name. Please update to 'github-gpt4o'.")
-            # Initialize provider manager
-            ProviderManager.initialize()
-            # Get appropriate provider and model - always LiteLLM now
-            self.provider = 'litellm'
-            self.model = 'github/gpt-4o'
-        else:
-            # All models use LiteLLM now
-            self.provider = 'litellm'
-            self.model = model if "/" in model else f"github/{model}"  # Default to GitHub provider if no provider specified
+        # Initialize provider manager
+        ProviderManager.initialize()
+        # All models use LiteLLM now
+        self.provider = 'litellm'
         
-        # No need for Pollinations API client
+        # Normalize the model name with Gemini
+        if model.lower() in ['gemini', 'gemini-2.0-flash']:
+            self.model = 'gemini/gemini-2.0-flash'
+        elif not '/' in model:
+            # Add gemini/ prefix if no provider specified
+            self.model = f"gemini/{model}" 
+        else:
+            self.model = model
+        
+        # No client needed
         self.api_client = None
         
         # Initialize streaming handler (always enable for consistency)
@@ -165,16 +165,7 @@ class Assistant:
         """Process the message and execute tools."""
         try:
             # Get completion based on provider
-            if self.provider == 'litellm':
-                # Special handling for GitHub models to ensure the API key is set
-                if self.model.startswith('github/') and not os.environ.get('GITHUB_API_KEY'):
-                    # Try to get it from config if it exists
-                    import config as conf
-                    if hasattr(conf, 'GITHUB_API_KEY') and conf.GITHUB_API_KEY:
-                        os.environ['GITHUB_API_KEY'] = conf.GITHUB_API_KEY
-                    else:
-                        print("Warning: Using a GitHub model but GITHUB_API_KEY is not set in environment or config")
-                
+            if self.provider == 'litellm':                
                 response = litellm.completion(
                     model=self.model,
                     messages=self.messages,
@@ -221,17 +212,11 @@ class Assistant:
         
         # Process images based on the model type
         if images:
-            print(f"{Fore.CYAN}Processing images for model: {self.model}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}Processing images for model: {self.model}{Style.RESETALL}")
             
-            # Process images differently based on model
-            if self.model.startswith('gemini/'):
-                # Gemini needs specific image formatting
-                self.image_data = process_image_for_gemini(images)
-                print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESET_ALL}")
-            else:
-                # GitHub and other models use standard format
-                self.image_data = process_image_for_github(images)
-                print(f"{Fore.GREEN}Processed images for GitHub/standard model{Style.RESET_ALL}")
+            # Process images - only Gemini supported now
+            self.image_data = process_image_for_gemini(images)
+            print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESETALL}")
         
         # Prepare the content array if images are present
         if self.image_data:
@@ -394,19 +379,11 @@ class Assistant:
         """
         Send a message and stream the response with callback for each chunk.
         """
-        # Process images based on the model type
+        # Process images - only Gemini supported now
         if images:
             print(f"{Fore.CYAN}Processing images for model (streaming): {self.model}{Style.RESETALL}")
-            
-            # Process images differently based on model
-            if self.model.startswith('gemini/'):
-                # Gemini needs specific image formatting
-                processed_images = process_image_for_gemini(images)
-                print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESETALL}")
-            else:
-                # GitHub and other models use standard format
-                processed_images = process_image_for_github(images)
-                print(f"{Fore.GREEN}Processed images for GitHub/standard model{Style.RESETALL}")
+            processed_images = process_image_for_gemini(images)
+            print(f"{Fore.GREEN}Processed images for Gemini model{Style.RESETALL}")
             
             # Pass the processed images to the stream handler
             return self.stream_handler.stream_send_message(message, processed_images, callback)

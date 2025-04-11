@@ -11,9 +11,8 @@ class ProviderManager:
     # Provider constants
     LITELLM = 'litellm'
     
-    # Model mappings for standardization - only keep mappings for the two supported models
+    # Model mappings for standardization - only keep mappings for the supported model
     MODEL_MAPPING = {
-        'gpt-4o': 'github/gpt-4o',
         'gemini': 'gemini/gemini-2.0-flash'
     }
     
@@ -39,7 +38,7 @@ class ProviderManager:
             Normalized model name for the provider
         """
         # If model is already in the proper format, return it
-        if model_name in ['github/gpt-4o', 'gemini/gemini-2.0-flash']:
+        if model_name in ['gemini/gemini-2.0-flash']:
             return model_name
             
         # Otherwise, try to map it
@@ -51,7 +50,7 @@ class ProviderManager:
         Get the appropriate provider and model name for a model family
         
         Args:
-            model_family: The model family (e.g., 'gpt4o') 
+            model_family: The model family (e.g., 'gemini') 
             
         Returns:
             Tuple of (provider, model_name)
@@ -60,18 +59,16 @@ class ProviderManager:
         if not cls._initialized:
             cls.initialize()
         
-        # Map directly to one of our two supported models
-        if model_family in ['gpt4o', 'pollinations-gpt4o', 'openai-large', 'github-gpt4o', 'gpt-4o']:
-            return cls.LITELLM, 'github/gpt-4o'
-        elif model_family in ['gemini', 'gemini-2.0-flash']:
+        # Map directly to our supported model
+        if model_family in ['gemini', 'gemini-2.0-flash']:
             return cls.LITELLM, 'gemini/gemini-2.0-flash'
         
         # If the model already includes the provider format, use it directly
-        if '/' in model_family:
+        if '/' in model_family and model_family.startswith('gemini/'):
             return cls.LITELLM, model_family
         
-        # Default to GPT-4o if unknown
-        return cls.LITELLM, 'github/gpt-4o'
+        # Default to Gemini
+        return cls.LITELLM, 'gemini/gemini-2.0-flash'
     
     @classmethod
     def should_use_primary(cls, model_family):
