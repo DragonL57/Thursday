@@ -167,8 +167,11 @@ export class MessageRenderer {
             this.clearToolStatusIndicators();
         }
         
+        // Store any existing buttons before updating content
+        const buttonsContainer = component.currentAssistantMessage.querySelector('.message-buttons-container');
+        
         if (isStreaming) {
-            // When streaming, always use the provided content directly - don't accumulate locally
+            // When streaming, always use the provided content directly
             component.currentAssistantMessage.setAttribute('data-markdown', content);
             messageBubble.setAttribute('data-content', content);
             
@@ -184,7 +187,6 @@ export class MessageRenderer {
                 
                 // Check for duplicated content before rendering
                 if (this._isDuplicatedContent(content)) {
-                    // If content appears duplicated, fix it before rendering
                     const fixedContent = this._removeDuplicateContent(content);
                     markdownContent.innerHTML = marked.parse(fixedContent);
                 } else {
@@ -195,52 +197,46 @@ export class MessageRenderer {
                 this._applyFormatting(markdownContent);
             } catch (error) {
                 console.error('Error parsing markdown:', error);
-                // Fallback to simple text rendering
                 messageBubble.textContent = content;
             }
         } else {
             // Original non-streaming behavior
-            // Get existing content from data attributes to prevent duplication
             let fullContent = component.currentAssistantMessage.getAttribute('data-markdown') || '';
-            let displayedContent = messageBubble.getAttribute('data-content') || '';
             
-            // Track the length before adding the new content to detect if we're actually adding anything
+            // Track the length before adding the new content
             const previousLength = fullContent.length;
             
-            // For new message bubbles or empty messages, always add the content without checking for duplicates
             if (fullContent.length === 0) {
                 fullContent = content;
-                console.log('New message bubble, adding initial content:', content.substring(0, 20) + '...');
-            } 
-            // Otherwise, check for duplicates before adding
-            else if (!fullContent.includes(content)) {
+            } else if (!fullContent.includes(content)) {
                 fullContent += content;
-                console.log('Adding new content to existing message:', content.substring(0, 20) + '...');
-            } else {
-                console.log('Skipping duplicate content:', content.substring(0, 20) + '...');
             }
             
-            // Always update data attributes, even if content hasn't changed
+            // Always update data attributes
             component.currentAssistantMessage.setAttribute('data-markdown', fullContent);
             messageBubble.setAttribute('data-content', fullContent);
             
-            // Only update UI if content actually changed
+            // Only update UI if content changed
             const contentChanged = fullContent.length > previousLength || previousLength === 0;
             
             if (contentChanged) {
-                console.log('Content changed, updating UI...');
-                
                 try {
-                    // Use marked to parse the raw markdown directly without preprocessing
                     messageBubble.innerHTML = `<div class="markdown-content">${marked.parse(fullContent)}</div>`;
-                    
-                    // Apply formatting
                     this._applyFormatting(messageBubble);
                 } catch (error) {
                     console.error('Error parsing markdown:', error);
-                    // Fallback to simple text rendering
                     messageBubble.textContent = fullContent;
                 }
+            }
+        }
+        
+        // Re-add copy button if this is an assistant message
+        const contentContainer = component.currentAssistantMessage.querySelector('.message-content-container');
+        if (contentContainer && !buttonsContainer) {
+            // Check if this is an actual assistant message (not a tool message)
+            if (!component.currentAssistantMessage.classList.contains('tool-message') && 
+                !component.currentAssistantMessage.hasAttribute('data-tool-container')) {
+                this.addCopyButton(component.currentAssistantMessage, contentContainer);
             }
         }
         
@@ -327,35 +323,50 @@ export class MessageRenderer {
         return content.replace(/\$(\d+(\.\d+)?\s*(billion|million|trillion|thousand|B|M|T|K)?)/g, '\\$$$1');
     }
     
-    // Add the copy button only to text messages (not tool messages or tool displays)
-    addCopyButton(messageGroup, messageElement) {
-        // MORE AGGRESSIVE CHECK: First check if this is any kind of tool-related element
-        
-        // Check if this is a tool message by class name
+    // Helper method to determine if a message should have a copy button
+    _shouldShowCopyButton(messageGroup, messageElement) {
+        // Never show copy button on tool messages or containers
         if (messageGroup.classList.contains('tool-message') || 
-            messageGroup.classList.contains('tools-list-container') ||
-            messageGroup.classList.contains('tool-display-container')) {
-            console.log('Skipping copy button: Element has tool-related class');
+            messageGroup.hasAttribute('data-tool-container') ||
+            messageGroup.hasAttribute('data-no-copy') ||
+            messageElement.hasAttribute('data-no-copy')) {
+            return false;
+        }
+
+        // Never show copy button if any parent is a tool message
+        let parent = messageElement.parentElement;
+        while (parent) {
+            if (parent.classList.contains('tool-message') || 
+                parent.hasAttribute('data-tool-container') ||
+                parent.hasAttribute('data-no-copy')) {
+                return false;
+            }
+            parent = parent.parentElement;
+        }
+
+        // Never show copy button if this is a system message or info message
+        if (messageGroup.classList.contains('info-message') ||
+            messageGroup.classList.contains('system-message')) {
+            return false;
+        }
+
+        // Never show copy button if the message is empty
+        const content = messageGroup.getAttribute('data-markdown') || messageElement.textContent;
+        if (!content || content.trim().length === 0) {
+            return false;
+        }
+
+        // Only show copy button for user messages and assistant messages
+        return messageGroup.classList.contains('user-message') || 
+               messageGroup.classList.contains('assistant-message');
+    }
+
+    // Add the copy button only to appropriate messages
+    addCopyButton(messageGroup, messageElement) {
+        // First check if this message should have a copy button
+        if (!this._shouldShowCopyButton(messageGroup, messageElement)) {
             return;
         }
-        
-        // Check if any parent is a tool-related container
-        if (messageElement.closest('.tool-display-container') || 
-            messageElement.closest('.tools-list-container') || 
-            messageElement.closest('.tool-message')) {
-            console.log('Skipping copy button: Element has tool-related parent');
-            return;
-        }
-        
-        // Check if this element contains any tool-related elements
-        if (messageElement.querySelector('.tool-display-container') ||
-            messageElement.querySelector('.tools-list-container') ||
-            messageElement.querySelector('.tool-message')) {
-            console.log('Skipping copy button: Element contains tool-related children');
-            return;
-        }
-        
-        // If we've made it this far, add the copy button
         
         // Store the raw markdown content as a data attribute for later copying
         const markdownContent = messageGroup.getAttribute('data-markdown') || messageElement.textContent;
@@ -366,22 +377,33 @@ export class MessageRenderer {
             messageGroup.id = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
         }
         
-        // Create a container for the buttons
-        const buttonsContainer = document.createElement('div');
-        buttonsContainer.className = 'message-buttons-container';
-        messageElement.appendChild(buttonsContainer);
+        // Create or get the buttons container
+        let buttonsContainer = messageElement.querySelector('.message-buttons-container');
+        if (!buttonsContainer) {
+            buttonsContainer = document.createElement('div');
+            buttonsContainer.className = 'message-buttons-container';
+            messageElement.appendChild(buttonsContainer);
+        }
         
         // Add retry button only for user messages
         if (messageGroup.classList.contains('user-message')) {
             const retryButton = this.createRetryButton(messageGroup);
-            buttonsContainer.appendChild(retryButton);
+            if (retryButton) {
+                buttonsContainer.appendChild(retryButton);
+            }
         }
         
-        // Create button with unique ID
-        const copyButton = document.createElement('div');
+        // Check if copy button already exists
+        let copyButton = buttonsContainer.querySelector('.copy-markdown-button');
+        if (copyButton) {
+            return; // Don't add another copy button
+        }
+        
+        // Create copy button
+        copyButton = document.createElement('div');
         copyButton.className = 'copy-markdown-button';
         copyButton.innerHTML = '<span class="material-icons-round">content_copy</span>';
-        copyButton.setAttribute('title', 'Copy as markdown');
+        copyButton.setAttribute('title', 'Copy message');
         
         const buttonId = `copy-btn-${messageGroup.id}`;
         copyButton.setAttribute('data-btn-id', buttonId);
@@ -389,18 +411,17 @@ export class MessageRenderer {
         // Only add event listener if not already processed
         if (!this._processedCopyButtons.has(buttonId)) {
             this._processedCopyButtons.add(buttonId);
-            
             copyButton.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent event bubbling
-                e.stopImmediatePropagation(); // Stop immediate propagation to prevent multiple handlers
-                console.log('Copy button clicked (from addCopyButton method):', messageGroup.id);
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                console.log('Copy button clicked:', messageGroup.id);
                 this.copyToClipboard(messageGroup);
             });
         }
         
         buttonsContainer.appendChild(copyButton);
     }
-    
+
     // Create a retry button for user messages
     createRetryButton(messageGroup) {
         const retryButton = document.createElement('div');

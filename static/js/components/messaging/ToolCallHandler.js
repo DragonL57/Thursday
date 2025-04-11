@@ -21,28 +21,30 @@ export class ToolCallHandler {
             const messageContainer = document.createElement('div');
             messageContainer.className = 'tool-message';
             messageContainer.setAttribute('data-placement', 'after-user');
-            messageContainer.setAttribute('data-tool-container', 'true'); // Add explicit attribute to identify tool messages
-            messageContainer.setAttribute('data-no-copy', 'true'); // Add explicit marker to prevent copy buttons
+            messageContainer.setAttribute('data-tool-container', 'true');
+            messageContainer.setAttribute('data-no-copy', 'true');
             
             const contentContainer = document.createElement('div');
             contentContainer.className = 'message-content-container';
-            contentContainer.setAttribute('data-tool-content', 'true'); // Add attribute to container
-            contentContainer.setAttribute('data-no-copy', 'true'); // Add attribute to prevent copy buttons
+            contentContainer.setAttribute('data-tool-content', 'true');
+            contentContainer.setAttribute('data-no-copy', 'true');
             
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
-            bubble.setAttribute('data-tool-content', 'true'); // Add attribute to bubble
-            bubble.setAttribute('data-no-copy', 'true'); // Add attribute to prevent copy buttons
+            bubble.setAttribute('data-tool-content', 'true');
+            bubble.setAttribute('data-no-copy', 'true');
             
             const list = document.createElement('div');
             list.className = 'tool-list';
-            list.setAttribute('data-has-header', 'true'); // Mark list as having a header
+            list.setAttribute('data-has-header', 'true');
+            list.setAttribute('data-no-copy', 'true');
             
             // Create an explicit header element that will always be visible
             const header = document.createElement('div');
             header.className = 'tool-list-header';
             header.textContent = 'Tools used to generate response';
-            header.setAttribute('data-clickable', 'true'); // Mark header as clickable
+            header.setAttribute('data-clickable', 'true');
+            header.setAttribute('data-no-copy', 'true');
             
             // Add the toggle arrow
             const toggleArrow = document.createElement('span');
@@ -53,32 +55,30 @@ export class ToolCallHandler {
             // Insert the header at the beginning
             list.appendChild(header);
             
-            // Add a more robust click handler
+            // Add click handler
             this._addToolListClickHandler(list, header, toggleArrow);
             
             bubble.appendChild(list);
             contentContainer.appendChild(bubble);
             messageContainer.appendChild(contentContainer);
             
-            // Place the tool list after the last user message instead of before assistant message
+            // Place the tool list after the last user message
             const userMessages = component.messagesContainer.querySelectorAll('.user-message');
             if (userMessages.length > 0) {
                 const lastUserMessage = userMessages[userMessages.length - 1];
-                // Insert after the last user message
                 if (lastUserMessage.nextSibling) {
                     component.messagesContainer.insertBefore(messageContainer, lastUserMessage.nextSibling);
                 } else {
                     component.messagesContainer.appendChild(messageContainer);
                 }
             } else {
-                // If no user message, append to the end
                 component.messagesContainer.appendChild(messageContainer);
             }
             
             // Store references
             this.currentMessageContainer = messageContainer;
             this.currentToolsList = list;
-
+            
             // Apply immediate cleanup to remove any copy buttons that might have been added
             this.removeCopyButtonsFromToolMessages(messageContainer, true);
             

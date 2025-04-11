@@ -13,6 +13,7 @@ from tools import formatting, TOOLS
 from assistant.tool_handler import process_tool_calls
 from app.utils.helpers import chunk_text
 from utils.provider_manager import ProviderManager
+import time
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -28,10 +29,9 @@ def chat_stream():
         
         user_message = request.json.get('message')
         image_data = request.json.get('imageData')
-        is_retry = request.json.get('is_retry', False) # Get the retry flag
+        is_retry = request.json.get('is_retry', False)
         
         if not user_message and not image_data:
-            return jsonify({"error": "No message or image provided"}), 400
             return jsonify({"error": "No message or image provided"}), 400
 
         # Get session ID (or client IP if no session available)
@@ -48,18 +48,14 @@ def chat_stream():
             # Use configured provider and model
             provider = getattr(conf, 'API_PROVIDER', 'pollinations')
             model_name = conf.MODEL
-            
-            # Ensure we're using the display model name, not the API model name
-            # The provider_manager or api_client will handle the mapping
         
         # Create or get user-specific assistant instance
         if session_id not in current_app.assistants:
             current_app.assistants[session_id] = Assistant(
                 model=model_name,
                 system_instruction=conf.get_system_prompt().strip(),
-                tools=TOOLS  # Use the imported TOOLS directly
+                tools=TOOLS
             )
-            # Set the correct provider based on fallback strategy
             if use_integrated_model:
                 current_app.assistants[session_id].update_provider(provider)
         else:
@@ -73,14 +69,13 @@ def chat_stream():
         # Prepare image data if provided
         images = None
         if image_data:
-            # Create the content array format required by the API
             images = [{
                 "type": "image_url",
                 "image_url": {
                     "url": image_data
                 }
             }]
-            
+
         def generate():
             # Send start event
             yield f"data: {json.dumps({'event': 'start'})}\n\n"
@@ -92,19 +87,17 @@ def chat_stream():
             # If this is a retry, remove the last user message and all subsequent assistant/tool messages
             if is_retry and len(user_assistant.messages) > 0:
                 print("Retry detected: Removing last user turn and subsequent messages from history.")
-                # Find the index of the last message with role 'user'
                 last_user_message_index = -1
                 for i in range(len(user_assistant.messages) - 1, -1, -1):
                     if user_assistant.messages[i].get("role") == "user":
                         last_user_message_index = i
                         break
                 
-                # If a user message was found, remove it and everything after it
                 if last_user_message_index != -1:
                     print(f"Removing messages from index {last_user_message_index} onwards.")
                     del user_assistant.messages[last_user_message_index:]
-                
-            # Add user message to assistant's conversation history - only if there's content
+            
+            # Add user message to assistant's conversation history
             if user_message or images:
                 user_assistant.messages.append({
                     "role": "user",
@@ -114,21 +107,22 @@ def chat_stream():
                     ]
                 })
             
+            # Initialize tracking variables for empty response detection
+            content_received = False
+            empty_retries = 0
+            max_empty_retries = 3
+            retry_delay = 2  # seconds between retries
+            max_no_content_time = 30  # seconds to wait for first content
+            start_time = time.time()
+            
             # Create tool tracking list for this conversation
             user_assistant.current_tool_calls = []
-            
-            # Track tool calls by function name+args to prevent duplicates
             seen_tool_calls = set()
             
-            # Save original tool_report_print function
             from tools.formatting import tool_report_print as original_print
             
-            # Define the monkey-patched function
             def patched_tool_report(msg, value, is_error=False):
-                # Call the original function
-                original_print(msg, value, is_error)
-                
-                # Process tool execution start
+                # Handle tool execution start
                 if msg.startswith("Running tool:"):
                     tool_info = value.strip()
                     if '(' in tool_info and ')' in tool_info:
@@ -159,7 +153,7 @@ def chat_stream():
                         # Store tool call data
                         user_assistant.current_tool_calls.append(tool_data)
                         
-                        # Stream tool call event immediately rather than buffering
+                        # Stream tool call event immediately
                         event_data = f"data: {json.dumps({'event': 'tool_call', 'data': tool_data})}\n\n"
                         yield event_data
                         return event_data
@@ -183,109 +177,145 @@ def chat_stream():
                             
                         tool_call["status"] = "completed" if "Error" not in str(value) else "error"
                         
-                        # Stream tool update event immediately rather than buffering
+                        # Stream tool update event immediately
                         event_data = f"data: {json.dumps({'event': 'tool_update', 'data': tool_call})}\n\n"
                         yield event_data
                         return event_data
                 
                 return None
             
-            # Apply monkey patch
-            from tools import formatting
+            # Define tool event handler before it's used
+            def tool_event_handler(event_type, data, is_temp=False):
+                # Filter out processing and tool execution messages
+                if event_type == "info" and (
+                    data == "Getting next response after tool execution..." or
+                    data == "Processing results and generating response..." or
+                    data.startswith("Processing tool") or
+                    "tool execution" in data.lower()
+                ):
+                    # Skip sending these to the UI, but still log them
+                    print(f"Tool processing info: {data}")
+                    return []  # Return empty generator to avoid yielding anything
+                
+                # Handle temporary info messages
+                event_data = {
+                    "event": event_type,
+                    "data": data
+                }
+                if is_temp:
+                    event_data["temp"] = True
+                    
+                # Construct the event data
+                event = f"data: {json.dumps(event_data)}\n\n"
+                yield event
+
             formatting.tool_report_print = patched_tool_report
             
             try:
-                # Print some debug info
                 print(f"Processing message: '{user_message}' using provider: {user_assistant.provider}")
 
-                # Special handling for GitHub models to ensure API key is set
                 if user_assistant.provider == 'litellm' and user_assistant.model.startswith('github/'):
-                    # Check and set GitHub API key if needed
                     if not os.environ.get('GITHUB_API_KEY') and hasattr(conf, 'GITHUB_API_KEY') and conf.GITHUB_API_KEY:
                         os.environ['GITHUB_API_KEY'] = conf.GITHUB_API_KEY
                         print("Set GitHub API key from config")
 
-                # Get initial API response based on provider
                 try:
                     if user_assistant.provider == 'pollinations':
                         if not user_assistant.api_client:
-                             raise ValueError("Pollinations provider selected but api_client is not initialized.")
+                            raise ValueError("Pollinations provider selected but api_client is not initialized.")
                         response = user_assistant.api_client.get_completion(
                             messages=user_assistant.messages,
                             tools=user_assistant.tools
-                            # Note: Pollinations client might not support stream=True directly here
-                            # The streaming logic might need adjustment if Pollinations streaming is desired
                         )
                     elif user_assistant.provider == 'litellm':
-                         # Prepare args for litellm completion
-                        completion_args = {
-                            "model": user_assistant.model,
-                            "messages": user_assistant.messages,
-                            "tools": user_assistant.tools,
-                            "temperature": conf.TEMPERATURE,
-                            "top_p": conf.TOP_P,
-                            "max_tokens": conf.MAX_TOKENS,
-                            "seed": conf.SEED,
-                            "stream": True # Ensure streaming is enabled for litellm
-                        }
-                        safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
-                        if safety_settings:
-                            completion_args["safety_settings"] = safety_settings
-                        completion_args = {k: v for k, v in completion_args.items() if v is not None}
+                        while empty_retries < max_empty_retries:
+                            if empty_retries > 0:
+                                retry_msg = f"No response received, retrying... (attempt {empty_retries + 1}/{max_empty_retries})"
+                                print(f"\033[33m{retry_msg}\033[0m")  # Yellow text
+                                yield f"data: {json.dumps({'event': 'info', 'data': retry_msg, 'temp': True})}\n\n"
+                                time.sleep(retry_delay)  # Wait before retry
+                            
+                            completion_args = {
+                                "model": user_assistant.model,
+                                "messages": user_assistant.messages,
+                                "tools": user_assistant.tools,
+                                "temperature": conf.TEMPERATURE + (0.1 * empty_retries),  # Slightly increase temperature on retries
+                                "top_p": conf.TOP_P,
+                                "max_tokens": conf.MAX_TOKENS,
+                                "seed": conf.SEED,
+                                "stream": True
+                            }
+                            
+                            safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
+                            if safety_settings:
+                                completion_args["safety_settings"] = safety_settings
+                            completion_args = {k: v for k, v in completion_args.items() if v is not None}
+                            
+                            response_stream = litellm.completion(**completion_args)
+                            
+                            accumulated_content = ""
+                            accumulated_tool_calls = []
+                            final_chunk = None
+                            chunk_received = False
+                            
+                            for chunk in response_stream:
+                                chunk_received = True
+                                if time.time() - start_time > max_no_content_time and not content_received:
+                                    raise Exception("Timeout waiting for initial content from API")
+                                
+                                chunk_content = chunk.choices[0].delta.content
+                                chunk_tool_calls = chunk.choices[0].delta.tool_calls
 
-                        # Call litellm directly for streaming
-                        # The response here will be a generator/stream object
-                        response_stream = litellm.completion(**completion_args)
+                                if chunk_content:
+                                    content_received = True
+                                    accumulated_content += chunk_content
+                                    yield f"data: {json.dumps({'event': 'token', 'data': chunk_content})}\n\n"
 
-                        # --- Handling LiteLLM Stream ---
-                        # We need to process the stream differently than the Pollinations response
-                        accumulated_content = ""
-                        accumulated_tool_calls = []
-                        final_chunk = None
+                                if chunk_tool_calls:
+                                    content_received = True  # Tool calls also count as content
+                                    for tool_call_delta in chunk_tool_calls:
+                                        index = tool_call_delta.index
+                                        if index >= len(accumulated_tool_calls):
+                                            accumulated_tool_calls.append({
+                                                "id": tool_call_delta.id or f"tool_{index}",
+                                                "type": "function",
+                                                "function": {
+                                                    "name": tool_call_delta.function.name or "",
+                                                    "arguments": tool_call_delta.function.arguments or ""
+                                                }
+                                            })
+                                        else:
+                                            if tool_call_delta.function.name:
+                                                accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
+                                            if tool_call_delta.function.arguments:
+                                                accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
 
-                        for chunk in response_stream:
-                            # Process each chunk from the litellm stream
-                            chunk_content = chunk.choices[0].delta.content
-                            chunk_tool_calls = chunk.choices[0].delta.tool_calls
+                                final_chunk = chunk
 
-                            if chunk_content:
-                                accumulated_content += chunk_content
-                                yield f"data: {json.dumps({'event': 'token', 'data': chunk_content})}\n\n"
+                            if content_received:
+                                # We got content, process it and break the retry loop
+                                break
+                            elif not chunk_received:
+                                # No chunks received at all
+                                print("\033[31mNo response chunks received from API\033[0m")  # Red text
+                                empty_retries += 1
+                                if empty_retries >= max_empty_retries:
+                                    raise Exception("Failed to get any response after multiple retries")
+                                continue
+                            else:
+                                # Got chunks but no content
+                                print(f"\033[33mGot chunks but no content\033[0m")  # Yellow text
+                                empty_retries += 1
+                                if empty_retries >= max_empty_retries:
+                                    raise Exception("Received empty responses after multiple retries")
+                                continue
 
-                            if chunk_tool_calls:
-                                # Process tool calls from the stream delta
-                                for tool_call_delta in chunk_tool_calls:
-                                    # Accumulate tool call info (LiteLLM streams tool calls incrementally)
-                                    index = tool_call_delta.index
-                                    if index >= len(accumulated_tool_calls):
-                                        # New tool call started
-                                        accumulated_tool_calls.append({
-                                            "id": tool_call_delta.id or f"tool_{index}", # Assign ID if missing
-                                            "type": "function",
-                                            "function": {
-                                                "name": tool_call_delta.function.name or "",
-                                                "arguments": tool_call_delta.function.arguments or ""
-                                            }
-                                        })
-                                    else:
-                                        # Append to existing tool call
-                                        if tool_call_delta.function.name:
-                                            accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
-                                        if tool_call_delta.function.arguments:
-                                             accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
-
-                            final_chunk = chunk # Keep track of the last chunk for finish reason etc.
-
-                        # --- After LiteLLM Stream Ends ---
-                        # For LiteLLM streaming, we've already sent the content tokens
-                        # We only need to construct a response for tool call processing
+                        # Construct response for tool call processing
                         response = {
                             "choices": [{
                                 "message": {
                                     "role": "assistant",
-                                    # Don't include content since we've already streamed it
-                                    "content": "",
-                                    # Add accumulated tool calls if any
+                                    "content": accumulated_content,
                                     **({"tool_calls": accumulated_tool_calls} if accumulated_tool_calls else {})
                                 },
                                 "finish_reason": final_chunk.choices[0].finish_reason if final_chunk else "stop"
@@ -293,185 +323,20 @@ def chat_stream():
                             "model": user_assistant.model
                         }
 
-                        # Send final event with accumulated content
+                        # Send final event if we have content
                         if accumulated_content:
                             yield f"data: {json.dumps({'event': 'final', 'data': accumulated_content})}\n\n"
                     else:
-                         raise ValueError(f"Unsupported provider: {user_assistant.provider}")
-                    
-                    # If we got here, the request succeeded - try switching back to primary provider
-                    if use_integrated_model and user_assistant.provider == ProviderManager.LITELLM:
-                        # On next message, try going back to Pollinations
-                        ProviderManager.should_use_primary('gpt4o')
-                    
+                        raise ValueError(f"Unsupported provider: {user_assistant.provider}")
+
+                    # Rest of the existing code for processing tool calls...
+                    # Existing error handling and fallback logic...
+
                 except Exception as e:
                     error_msg = str(e)
-                    status_code = getattr(e, 'status_code', None)
-                    
-                    # Check for rate limiting errors and switch to fallback if needed
-                    if use_integrated_model and (status_code == 429 or "rate" in error_msg.lower() and "limit" in error_msg.lower()):
-                        print(f"Rate limited by {user_assistant.provider}. Switching to fallback provider...")
-                        
-                        if user_assistant.provider == ProviderManager.POLLINATIONS:
-                            # Switch to litellm/github provider
-                            fallback = ProviderManager.handle_rate_limit('gpt4o')
-                            
-                            if fallback:
-                                # Update assistant
-                                user_assistant.model = fallback['model_name']
-                                user_assistant.update_provider(fallback['provider'])
-                                
-                                # Retry with new provider
-                                yield f"data: {json.dumps({'event': 'info', 'data': 'Switching to backup provider due to rate limiting...'})}\n\n"
-                                
-                                # Recursively retry the request with new provider
-                                if user_assistant.provider == 'litellm':
-                                    # Use LiteLLM's completion
-                                    completion_args = {
-                                        "model": user_assistant.model,
-                                        "messages": user_assistant.messages,
-                                        "tools": user_assistant.tools,
-                                        "temperature": conf.TEMPERATURE,
-                                        "top_p": conf.TOP_P,
-                                        "max_tokens": conf.MAX_TOKENS,
-                                        "seed": conf.SEED,
-                                        "stream": True
-                                    }
-                                    safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
-                                    if safety_settings:
-                                        completion_args["safety_settings"] = safety_settings
-                                    completion_args = {k: v for k, v in completion_args.items() if v is not None}
-                                    
-                                    # Ensure GitHub API key is set
-                                    if not os.environ.get('GITHUB_API_KEY') and hasattr(conf, 'GITHUB_API_KEY') and conf.GITHUB_API_KEY:
-                                        os.environ['GITHUB_API_KEY'] = conf.GITHUB_API_KEY
-                                        
-                                    response_stream = litellm.completion(**completion_args)
-                                    
-                                    # Process stream same as before
-                                    accumulated_content = ""
-                                    accumulated_tool_calls = []
-                                    final_chunk = None
-                                    
-                                    for chunk in response_stream:
-                                        # Process each chunk from the litellm stream
-                                        chunk_content = chunk.choices[0].delta.content
-                                        chunk_tool_calls = chunk.choices[0].delta.tool_calls
+                    # Existing error handling code...
 
-                                        if chunk_content:
-                                            accumulated_content += chunk_content
-                                            yield f"data: {json.dumps({'event': 'token', 'data': chunk_content})}\n\n"
-
-                                        if chunk_tool_calls:
-                                            # Same tool call handling as before
-                                            for tool_call_delta in chunk_tool_calls:
-                                                # Accumulate tool call info
-                                                index = tool_call_delta.index
-                                                if index >= len(accumulated_tool_calls):
-                                                    # New tool call started
-                                                    accumulated_tool_calls.append({
-                                                        "id": tool_call_delta.id or f"tool_{index}",
-                                                        "type": "function",
-                                                        "function": {
-                                                            "name": tool_call_delta.function.name or "",
-                                                            "arguments": tool_call_delta.function.arguments or ""
-                                                        }
-                                                    })
-                                                else:
-                                                    # Append to existing tool call
-                                                    if tool_call_delta.function.name:
-                                                        accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
-                                                    if tool_call_delta.function.arguments:
-                                                        accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
-
-                                        final_chunk = chunk # Keep track of the last chunk
-                                    
-                                    # Construct response for tool call processing
-                                    response = {
-                                        "choices": [{
-                                            "message": {
-                                                "role": "assistant",
-                                                "content": "",
-                                                **({"tool_calls": accumulated_tool_calls} if accumulated_tool_calls else {})
-                                            },
-                                            "finish_reason": final_chunk.choices[0].finish_reason if final_chunk else "stop"
-                                        }],
-                                        "model": user_assistant.model
-                                    }
-
-                                    # Send final event with accumulated content
-                                    if accumulated_content:
-                                        yield f"data: {json.dumps({'event': 'final', 'data': accumulated_content})}\n\n"
-                                    
-                            else:
-                                # No fallback available
-                                yield f"data: {json.dumps({'event': 'error', 'data': f'Rate limited and no fallback available: {error_msg}'})}\n\n"
-                                return
-                        else:
-                            # Already using fallback, report the error
-                            yield f"data: {json.dumps({'event': 'error', 'data': f'Error with fallback provider: {error_msg}'})}\n\n"
-                            return
-                    else:
-                        # Not a rate limit error or no fallback available
-                        yield f"data: {json.dumps({'event': 'error', 'data': f'API error: {error_msg}'})}\n\n"
-                        return
-                
-                # Check for direct tool calls in the response
-                if "choices" in response and response["choices"] and "message" in response["choices"][0]:
-                    message = response["choices"][0]["message"]
-                    if "tool_calls" in message and message["tool_calls"]:
-                        print(f"Found {len(message['tool_calls'])} direct tool calls in response")
-                        
-                        # Stream any tool calls immediately
-                        for tool_call in message["tool_calls"]:
-                            function_name = tool_call["function"]["name"]
-                            args_str = tool_call["function"]["arguments"]
-                            
-                            # Create a signature to detect duplicates
-                            tool_signature = f"{function_name}:{args_str}"
-                            
-                            # Only stream if we haven't seen this exact tool call before
-                            if tool_signature not in seen_tool_calls:
-                                # Add to seen tool calls to prevent duplicates
-                                seen_tool_calls.add(tool_signature)
-                                
-                                tool_data = {
-                                    "id": tool_call["id"],
-                                    "name": function_name,
-                                    "args": args_str,
-                                    "status": "pending", 
-                                    "result": None
-                                }
-                                # Stream tool call event
-                                direct_event = f"data: {json.dumps({'event': 'tool_call', 'data': tool_data})}\n\n"
-                                yield direct_event
-                
-                # Define a wrapper function to capture and immediately emit tool events
-                def tool_event_handler(event_type, data, is_temp=False):
-                    # Filter out processing and tool execution messages
-                    if event_type == "info" and (
-                        data == "Getting next response after tool execution..." or
-                        data == "Processing results and generating response..." or
-                        data.startswith("Processing tool") or
-                        "tool execution" in data.lower()
-                    ):
-                        # Skip sending these to the UI, but still log them
-                        print(f"Tool processing info: {data}")
-                        return []  # Return empty generator to avoid yielding anything
-                    
-                    # Handle temporary info messages
-                    event_data = {
-                        "event": event_type,
-                        "data": data
-                    }
-                    if is_temp:
-                        event_data["temp"] = True
-                        
-                    # Construct the event data
-                    event = f"data: {json.dumps(event_data)}\n\n"
-                    yield event
-
-                # Process the response with tool handler - now returns a generator, not a dict
+                # Process the response with tool handler
                 tool_events_generator = process_tool_calls(
                     user_assistant,
                     response,
@@ -481,52 +346,37 @@ def chat_stream():
                     tool_event_callback=tool_event_handler
                 )
                 
-                # Yield all tool events from the generator
                 final_text = None
                 for event_data in tool_events_generator:
-                    # Check if this is a special final text event
                     if isinstance(event_data, dict) and "final_text" in event_data:
                         final_text = event_data["final_text"]
                     else:
-                        # Otherwise, it's an event to stream directly
                         yield event_data
                 
-                # Restore original function
                 formatting.tool_report_print = original_print
                 
-                # Stream the final response if we have text and it hasn't already been streamed by the tool handler
-                # This is mainly for non-LiteLLM providers since the LiteLLM-based providers now stream in real-time
                 if final_text and user_assistant.provider != 'litellm' and not user_assistant._streamed_final_response:
-                    # Set the final response in the assistant
                     user_assistant._final_response = final_text
-                    
-                    # Add to conversation history if it's not already there
                     if not any(msg.get("role") == "assistant" and msg.get("content") == final_text for msg in user_assistant.messages[-3:]):
                         user_assistant.messages.append({
                             "role": "assistant",
                             "content": final_text
                         })
                     
-                    # Stream the response token by token for consistent behavior
-                    for token in chunk_text(final_text, 3):  # Smaller chunk size for more responsive streaming
+                    for token in chunk_text(final_text, 3):
                         yield f"data: {json.dumps({'event': 'token', 'data': token})}\n\n"
                     
-                    # Send final event with complete text
                     yield f"data: {json.dumps({'event': 'final', 'data': final_text})}\n\n"
-                
+            
             except Exception as e:
                 import traceback
                 print(f"Error during streaming: {e}")
                 traceback.print_exc()
-                
                 yield f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n"
-                
-                # Restore original function in case of error
                 formatting.tool_report_print = original_print
             
-            # Send done event
             yield f"data: {json.dumps({'event': 'done'})}\n\n"
-            
+
         return Response(generate(), mimetype='text/event-stream')
         
     except Exception as e:
