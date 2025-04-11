@@ -199,33 +199,65 @@ def process_image_for_gemini(image_data):
         return None
     
     try:
-        # Handle direct base64 string - this is the expected format from the UI for Gemini
+        # Handle direct base64 string - this is the expected format from the UI
         if isinstance(image_data, str) and image_data.startswith('data:image/'):
-            print(f"{Fore.CYAN}Image data is already base64 string for Gemini{Style.RESET_ALL}")
-            return _process_base64_image_for_gemini(image_data)
+            print(f"{Fore.CYAN}Converting base64 string to Gemini format{Style.RESET_ALL}")
+            pattern = r'data:image/([a-zA-Z]+);base64,(.+)'
+            match = re.match(pattern, image_data)
+            
+            if not match:
+                print(f"{Fore.RED}Invalid image data URL format{Style.RESET_ALL}")
+                return None
+                
+            img_format, base64_content = match.groups()
+            
+            # Return in format expected by Gemini via litellm
+            return {
+                "type": "image_url", 
+                "image_url": {"url": image_data}
+            }
         
-        # Handle dictionary format (already structured)
+        # Handle dictionary format (already structured for OpenAI/LiteLLM format)
         elif isinstance(image_data, dict):
-            # If it's in standard OpenAI format, extract the base64 URL
             if image_data.get("type") == "image_url" and "image_url" in image_data:
                 url = image_data["image_url"].get("url")
                 if url and isinstance(url, str) and url.startswith('data:image/'):
-                    return _process_base64_image_for_gemini(url)
+                    # It's already in the correct format
+                    return image_data
             
-            return _process_dict_image_for_gemini(image_data)
+            # If dict has a url directly
+            if 'url' in image_data and isinstance(image_data['url'], str):
+                if image_data['url'].startswith('data:image/'):
+                    return {
+                        "type": "image_url", 
+                        "image_url": {"url": image_data['url']}
+                    }
             
-        # Handle list input - process only first image for Gemini
+            print(f"{Fore.YELLOW}Using original dictionary image format{Style.RESET_ALL}")
+            return image_data
+            
+        # Handle list input - convert to format needed for Gemini
         elif isinstance(image_data, list) and len(image_data) > 0:
-            print(f"{Fore.CYAN}Processing first image from list of {len(image_data)}{Style.RESET_ALL}")
-            first_item = image_data[0]
+            print(f"{Fore.CYAN}Processing image list for Gemini{Style.RESET_ALL}")
             
-            # If it's in standard OpenAI format, extract the base64 URL
-            if isinstance(first_item, dict) and first_item.get("type") == "image_url":
-                url = first_item.get("image_url", {}).get("url")
-                if url and isinstance(url, str) and url.startswith('data:image/'):
-                    return _process_base64_image_for_gemini(url)
+            # Process each image in the list
+            formatted_images = []
             
-            return process_image_for_gemini(first_item)
+            for item in image_data:
+                # If it's in standard OpenAI/LiteLLM format
+                if isinstance(item, dict) and item.get("type") == "image_url":
+                    url = item.get("image_url", {}).get("url")
+                    if url and isinstance(url, str) and url.startswith('data:image/'):
+                        formatted_images.append(item)
+                        
+                # If it's a direct base64 string
+                elif isinstance(item, str) and item.startswith('data:image/'):
+                    formatted_images.append({
+                        "type": "image_url", 
+                        "image_url": {"url": item}
+                    })
+            
+            return formatted_images
         
         # If we get here and no formatting was applied, return None with warning
         print(f"{Fore.RED}Could not process image data for Gemini - unsupported format{Style.RESET_ALL}")

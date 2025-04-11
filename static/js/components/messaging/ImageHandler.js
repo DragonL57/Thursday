@@ -45,7 +45,7 @@ export class ImageHandler {
         }
         
         console.log('Using Gemini image format');
-        return this._formatForGemini(component.currentImageData);
+        return component.currentImageData;
     }
     
     // Show image preview in the UI with improved styling
@@ -65,6 +65,9 @@ export class ImageHandler {
         const img = document.createElement('img');
         img.src = dataUrl;
         img.alt = 'Preview';
+        img.style.maxHeight = '150px';
+        img.style.maxWidth = '100%';
+        img.style.borderRadius = '8px';
         
         // Add control elements
         const removeBtn = this._createRemoveButton();
@@ -150,6 +153,19 @@ export class ImageHandler {
         removeBtn.className = 'remove-image';
         removeBtn.innerHTML = '×';
         removeBtn.title = 'Remove image';
+        removeBtn.style.position = 'absolute';
+        removeBtn.style.top = '5px';
+        removeBtn.style.right = '5px';
+        removeBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        removeBtn.style.color = 'white';
+        removeBtn.style.borderRadius = '50%';
+        removeBtn.style.width = '24px';
+        removeBtn.style.height = '24px';
+        removeBtn.style.display = 'flex';
+        removeBtn.style.alignItems = 'center';
+        removeBtn.style.justifyContent = 'center';
+        removeBtn.style.cursor = 'pointer';
+        removeBtn.style.border = 'none';
         
         // Add event listener to remove button
         removeBtn.addEventListener('click', (e) => {
@@ -164,6 +180,14 @@ export class ImageHandler {
     _createSizeIndicator() {
         const sizeIndicator = document.createElement('span');
         sizeIndicator.className = 'image-size-indicator';
+        sizeIndicator.style.position = 'absolute';
+        sizeIndicator.style.bottom = '5px';
+        sizeIndicator.style.left = '5px';
+        sizeIndicator.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        sizeIndicator.style.color = 'white';
+        sizeIndicator.style.padding = '2px 6px';
+        sizeIndicator.style.borderRadius = '4px';
+        sizeIndicator.style.fontSize = '12px';
         
         // Add size info if available
         if (this.messagingComponent.imageMetadata) {
@@ -172,37 +196,5 @@ export class ImageHandler {
         }
         
         return sizeIndicator;
-    }
-    
-    _getProviderInfo() {
-        // More robust model detection by checking both the dropdown and the select element
-        const modelSelect = document.getElementById('modelSelect');
-        const modelSelectorValue = this._getModelSelectorValue();
-        
-        // First try the model selector value, then fall back to the select element
-        const modelValue = modelSelectorValue || (modelSelect ? modelSelect.value : null);
-        
-        return {
-            provider: 'litellm', // Always litellm now
-            model: modelValue || 'gemini/gemini-2.0-flash' // Default to Gemini if not found
-        };
-    }
-    
-    // Get the selected model from the UI dropdown
-    _getModelSelectorValue() {
-        const activeOption = document.querySelector('.model-option.active');
-        return activeOption ? activeOption.dataset.value : null;
-    }
-    
-    _formatForGemini(imageData) {
-        console.log('Using Gemini-specific format for image');
-        
-        if (!imageData.startsWith('data:image/')) {
-            console.error('Invalid image format for Gemini');
-            return null;
-        }
-        
-        // For Gemini, just return the raw base64 data
-        return imageData;
     }
 }

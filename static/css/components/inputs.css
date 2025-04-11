@@ -117,6 +117,62 @@
 .image-preview-container {
     padding: 0.5rem;
     border-top: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.image-preview-container.hidden {
+    display: none;
+}
+
+.image-preview {
+    position: relative;
+    max-width: 150px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.image-preview img {
+    display: block;
+    max-height: 150px;
+    max-width: 100%;
+    object-fit: cover;
+}
+
+.remove-image {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background-color: rgba(0,0,0,0.5);
+    color: white;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: none;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.remove-image:hover {
+    background-color: rgba(0,0,0,0.7);
+}
+
+.image-size-indicator {
+    position: absolute;
+    bottom: 5px;
+    left: 5px;
+    background-color: rgba(0,0,0,0.5);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
 }
 
 /* Disabled state during generation */
