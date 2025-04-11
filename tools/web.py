@@ -1,18 +1,23 @@
 """
 Functions for web-related operations.
 """
-import re  # Add missing import for regular expressions 
+import re  
 import random
 import time
 import io
+import json
 import requests
 import asyncio
 import aiohttp
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 from duckduckgo_search.exceptions import DuckDuckGoSearchException, RatelimitException, TimeoutException
-from typing import List, Dict, Union, Optional, Tuple, Any  # Add typing imports
+from typing import List, Dict, Union, Optional, Tuple, Any
 from urllib.parse import urlparse, urljoin
+import hashlib
+import os
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from .formatting import tool_message_print, tool_report_print
 
@@ -24,6 +29,9 @@ try:
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.common.exceptions import TimeoutException as SeleniumTimeoutException
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.common.action_chains import ActionChains
+    from selenium.webdriver.common.keys import Keys
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -36,13 +44,39 @@ try:
 except ImportError:
     SCRAPY_AVAILABLE = False
 
-DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+# Try to import undetected_chromedriver for enhanced anti-bot capabilities
+try:
+    import undetected_chromedriver as uc
+    UNDETECTED_CHROME_AVAILABLE = True
+except ImportError:
+    UNDETECTED_CHROME_AVAILABLE = False
 
-# Create a list of realistic user agents to rotate
-USER_AGENTS = [
+# Add support for requests_html for JavaScript rendering without full browser
+try:
+    from requests_html import HTMLSession
+    REQUESTS_HTML_AVAILABLE = True
+except ImportError:
+    REQUESTS_HTML_AVAILABLE = False
+
+# Try to import fake_useragent for better user agent rotation
+try:
+    from fake_useragent import UserAgent
+    UA_GENERATOR_AVAILABLE = True
+except ImportError:
+    UA_GENERATOR_AVAILABLE = False
+
+# Check if chardet is available for better encoding detection
+try:
+    import chardet
+    CHARDET_AVAILABLE = True
+except ImportError:
+    CHARDET_AVAILABLE = False
+
+# Default fallback user agents if fake_useragent is not available
+DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+FALLBACK_USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15", 
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/133.0.2623.0 Safari/537.36",
@@ -55,17 +89,12 @@ JS_REQUIRED_SITES = {}
 # Let's remember which sites need headless browser vs standard requests
 SITE_CAPABILITIES = {}
 
-# Add proxy rotation capabilities
-PROXY_LIST = []  # Can be populated from a file or service if needed
+# Create a simple cache for web responses to avoid redundant requests
+CACHE_DIR = Path.home() / ".cache" / "web_scraper"
+CACHE_EXPIRY = 24  # hours
 
-# Content extraction modes
-EXTRACT_MODES = {
-    "text": "Extract plain text content",
-    "markdown": "Extract content preserving basic markdown formatting",
-    "html": "Return cleaned HTML content",
-    "structured": "Extract structured data from the page (article title, content, author, date)",
-    "links": "Extract all links from the page"
-}
+# Ensure cache directory exists
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Common website parsers for popular sites
 SITE_SPECIFIC_PARSERS = {
@@ -158,966 +187,1172 @@ def web_search(
         tool_report_print("Search Error", error_message, is_error=True)
         return [{"title": "Search Error", "href": "", "body": f"Failed to search for '{query}'. Error: {str(e)}. Please try again with a different query or use another approach."}]
 
-def read_website_content(
+def fetch_webpage(
     url: str, 
-    timeout: int = 5, 
+    timeout: int = 10, 
     extract_mode: str = "text",
-    extract_links: bool = False  # Changed default to True so links are always extracted
-) -> str:
+    extract_links: bool = True,
+    bypass_bot_protection: bool = False,
+    use_cache: bool = True,
+    cache_expiry_hours: int = 24,
+    smart_retry: bool = True,
+    render_js: bool = True
+) -> Dict[str, Any]:
     """
-    Fetch and return the text content of a webpage/article.
+    Enhanced web content extractor with multiple levels of fallbacks, caching, and anti-bot protection.
 
     Args:
-      url: The URL of the webpage.
-      timeout: Request timeout in seconds.
-      extract_mode: Content extraction mode ('text' or 'markdown').
-                   'text' extracts plain text, 'markdown' preserves some formatting.
-      extract_links: Whether to extract and include links from the page (default: True).
+        url: The URL of the webpage.
+        timeout: Request timeout in seconds.
+        extract_mode: Content extraction mode ('text', 'markdown', or 'html').
+            'text' extracts plain text, 'markdown' preserves some formatting, 'html' returns cleaned HTML.
+        extract_links: Whether to extract and include links from the page.
+        bypass_bot_protection: Try extra measures to bypass anti-bot protections.
+        use_cache: Whether to use cached responses when available.
+        cache_expiry_hours: How long to keep cached responses valid.
+        smart_retry: Use adaptive retry strategies for difficult sites.
+        render_js: Whether to attempt JavaScript rendering for dynamic content.
 
-    Returns: The text content of the website in the requested format, or an error message.
+    Returns: 
+        A dictionary containing the extracted content and metadata:
+        {
+            'content': str,           # The main content text/html
+            'title': str,             # Page title if available
+            'links': Dict,            # Categorized links if extract_links=True
+            'success': bool,          # Whether extraction was successful
+            'source': str,            # Source of extraction (direct/archive/fallback)
+            'error': str,             # Error message if any
+            'timestamp': str          # When the content was fetched
+        }
     """
     # Initial tool announcement
-    tool_message_print("read_website_content", [
+    tool_message_print("fetch_webpage", [
         ("url", url), 
         ("timeout", str(timeout)),
         ("extract_mode", extract_mode),
-        ("extract_links", str(extract_links))
+        ("extract_links", str(extract_links)),
+        ("bypass_bot_protection", str(bypass_bot_protection))
     ])
     
-    # Show execution output
-    tool_message_print("read_website_content", [
-        ("url", url), 
-        ("timeout", str(timeout)),
-        ("extract_mode", extract_mode),
-        ("extract_links", str(extract_links))
-    ], is_output=True)
+    # Result template
+    result = {
+        'content': "",
+        'title': "",
+        'links': {},
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
     
     # Check if URL looks valid
     if not url.startswith(('http://', 'https://')):
-        tool_report_print("Error:", f"Invalid URL: {url}", is_error=True)
-        return f"Invalid URL: {url}. URLs must start with http:// or https://."
+        result['error'] = f"Invalid URL: {url}. URLs must start with http:// or https://."
+        result['success'] = False
+        tool_report_print("Error:", result['error'], is_error=True)
+        return result
     
-    # Try using Selenium if available
-    if SELENIUM_AVAILABLE:
-        try:
-            tool_report_print("Info:", "Using Selenium with headless browser to retrieve content")
-            return _selenium_get_website_content(url, timeout, extract_mode, extract_links)
-        except Exception as e:
-            tool_report_print("Warning:", f"Selenium approach failed: {str(e)}. Falling back to HTTP request", is_error=True)
-    else:
-        tool_report_print("Info:", "Selenium not available. Using HTTP request approach")
-    
-    # Fall back to the requests-based approach
+    # Clean URL (remove tracking parameters)
     try:
-        # More sophisticated User-Agent rotation to avoid detection
-        user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        ]
-        
-        # Choose a random user agent
-        headers = {
-            'User-Agent': random.choice(user_agents),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'none',
-            'Sec-Fetch-User': '?1',
-            'Cache-Control': 'max-age=0',
-        }
-        
-        # Enhanced function to detect encoding with multiple fallbacks and specific focus on Vietnamese
-        def detect_and_decode_content(response_content):
-            """
-            Detect and decode content with multiple fallback options
-            Returns a tuple of (decoded_text, encoding_used)
-            """
-            # Try to extract encoding from content-type header or meta tags first
-            encodings_to_try = []
-            
-            # Use chardet for precise encoding detection
-            try:
-                import chardet
-                detection = chardet.detect(response_content)
-                if detection and detection['confidence'] > 0.7:
-                    encodings_to_try.append(detection['encoding'])
-                    tool_report_print("Encoding Detection:", f"Detected encoding: {detection['encoding']} (confidence: {detection['confidence']})")
-            except ImportError:
-                tool_report_print("Notice:", "chardet library not available, using fallback encoding detection")
-                
-                # If chardet is not available, try to detect encoding from common patterns
-                # HTML5 default encoding is UTF-8
-                if b'<meta charset="utf-8"' in response_content or b'<meta charset="UTF-8"' in response_content:
-                    encodings_to_try.append('utf-8')
-                    tool_report_print("Encoding Detection:", "Found UTF-8 charset in meta tag")
-                
-                try:
-                    # Check for other charset declarations
-                    charset_match = re.search(b'<meta[^>]*charset=[\'"](.*?)[\'"]', response_content)
-                    if charset_match:
-                        detected_charset = charset_match.group(1).decode('ascii', errors='ignore').lower()
-                        if detected_charset and detected_charset not in encodings_to_try:
-                            encodings_to_try.append(detected_charset)
-                            tool_report_print("Encoding Detection:", f"Found charset in meta tag: {detected_charset}")
-                except Exception as e:
-                    tool_report_print("Warning:", f"Error detecting charset from meta tag: {str(e)}")
-            
-            # Add common encodings as fallbacks
-            common_encodings = ['utf-8', 'utf-16', 'iso-8859-1', 'windows-1252', 'latin1', 'cp1252']
-            
-            # Add Vietnamese encodings with higher priority for Vietnamese content
-            vietnamese_encodings = ['windows-1258', 'cp1258']
-            
-            # Add Asian and Vietnamese encodings for better support
-            asian_encodings = ['big5', 'euc-jp', 'euc-kr', 'gb2312', 'shift_jis', 'gb18030']
-            
-            # Check if the content might be Vietnamese based on some common byte sequences
-            is_likely_vietnamese = False
-            try:
-                # Look for common Vietnamese Unicode byte sequences in UTF-8
-                vn_patterns = [b'\xe1\xbb\x9b', b'\xe1\xba\xa1', b'\xe1\xbb\x91', b'\xe1\xba\xbf', b'\xe1\xbb\x87']
-                for pattern in vn_patterns:
-                    if pattern in response_content:
-                        is_likely_vietnamese = True
-                        tool_report_print("Info:", "Content appears to be Vietnamese based on byte patterns")
-                        break
-            except Exception as e:
-                tool_report_print("Warning:", f"Error checking for Vietnamese patterns: {str(e)}")
-            
-            # If content looks like Vietnamese, prioritize Vietnamese encodings
-            if is_likely_vietnamese:
-                # Move Vietnamese encodings to the front of the list if content seems Vietnamese
-                encodings_to_try = [enc for enc in encodings_to_try if enc not in vietnamese_encodings]
-                encodings_to_try = vietnamese_encodings + encodings_to_try
-            
-            # Add all encodings to our list, but prioritize the more common ones
-            encodings_to_try.extend([enc for enc in common_encodings if enc not in encodings_to_try])
-            encodings_to_try.extend([enc for enc in vietnamese_encodings if enc not in encodings_to_try])
-            encodings_to_try.extend([enc for enc in asian_encodings if enc not in encodings_to_try])
-            encodings_to_try.append('ascii')  # Last resort
-            
-            # Try all potential encodings
-            for encoding in encodings_to_try:
-                if not encoding:
-                    continue
-                    
-                try:
-                    decoded_text = response_content.decode(encoding)
-                    
-                    # Perform additional validation to check if the decoding is reasonable
-                    if not is_valid_decoded_text(decoded_text):
-                        tool_report_print("Validation:", f"Content decoded with {encoding} failed validation, trying next encoding")
-                        continue
-                    
-                    return decoded_text, encoding
-                except (UnicodeDecodeError, LookupError) as e:
-                    tool_report_print("Decode Error:", f"Failed with encoding {encoding}: {str(e)}")
-                    continue
-            
-            # Last resort: force decode with utf-8, ignoring errors
-            try:
-                tool_report_print("Fallback:", "Using forced UTF-8 decoding with error replacement")
-                decoded_text = response_content.decode('utf-8', errors='replace')
-                
-                # We need to check if the result is actually usable
-                if is_valid_decoded_text(decoded_text):
-                    return decoded_text, 'utf-8-replace'
-                else:
-                    tool_report_print("Fallback:", "UTF-8 decode with replacement resulted in unusable content, trying latin1")
-                    latin1_text = response_content.decode('latin1', errors='replace')
-                    return latin1_text, 'latin1-forced' if is_valid_decoded_text(latin1_text) else None
-            except Exception as e:
-                tool_report_print("Error:", f"Failed all decoding attempts: {str(e)}", is_error=True)
-                return None, None
-        
-        # Add a new function to validate if the decoded text is plausible web content
-        def is_valid_decoded_text(text):
-            if not text:
-                return False
-                
-            # Check 1: Must have some recognizable HTML or text patterns
-            if not any(pattern in text.lower() for pattern in ['<html', '<body', '<div', '<p', '<h1', '<h2', '<a href', 'http']):
-                # If it doesn't look like HTML, check if it's at least readable text
-                # Count readable ASCII characters
-                readable_chars = sum(1 for c in text[:500] if 32 <= ord(c) <= 126)
-                if readable_chars / min(len(text[:500]), 500) < 0.4:  # Lower threshold to 40% readable
-                    return False
-            
-            # Check 2: Should not have too many binary or control characters
-            binary_chars = sum(1 for c in text[:1000] if ord(c) < 9 or 14 <= ord(c) <= 31)
-            if binary_chars > 15:  # Increased threshold slightly
-                return False
-            
-            # Check 3: Detect if text contains mostly mojibake/replacement characters
-            replacement_chars = text[:500].count('�')
-            if replacement_chars > len(text[:500]) * 0.1:  # More than 10% are replacement chars
-                return False
-                
-            # Check 4: Text should contain a reasonable amount of common words or characters
-            # Expand pattern matching to include non-English content markers
-            common_patterns = [
-                'the', 'and', 'this', 'for', ' a ', ' to ', ' of ', ' in ', '<div', '<p', 'http',
-                ' là ', ' và ', ' của ', ' có ', ' cho ', 'cũng', ' các ', ' không ',  # Vietnamese patterns
-                'việt', 'người', 'được', 'những', 'trong', 'chính'  # Additional Vietnamese patterns
-            ]
-            pattern_matches = sum(1 for pattern in common_patterns if pattern in text.lower())
-            if pattern_matches < 2 and len(text) > 200:  # At least 2 common patterns in longer text
-                return False
-                
-            # Add check for gibberish sequences - nonsensical character patterns
-            # Fix the problematic regex by removing \p which causes issues
-            gibberish_pattern = re.compile(r'[A-Za-z0-9?!@#$%^&*()]{10,}')
-            gibberish_matches = gibberish_pattern.findall(text[:1000])
-            if gibberish_matches and sum(len(m) for m in gibberish_matches) > 200:
-                return False
-                
-            return True
-    
-        # Function to clean content of problematic characters
-        def sanitize_content(text):
-            """Remove or replace problematic characters in the text"""
-            if not text:
-                return ""
-                
-            try:
-                # Replace control characters except standard whitespace
-                text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]', '', text)
-                
-                # Check for high concentration of unusual characters (possible encoding issue)
-                unusual_chars = re.findall(r'[^\x00-\x7F]', text[:500])  # Check first 500 chars
-                unusual_ratio = len(unusual_chars) / min(len(text[:500]), 500) if text else 0
-                
-                if unusual_ratio > 0.3:  # If more than 30% are unusual characters
-                    tool_report_print("Warning:", f"High concentration of non-ASCII characters detected ({unusual_ratio:.1%}), possible encoding issues", is_error=True)
-                    
-                    # Detect if content looks like Vietnamese
-                    vietnamese_markers = ['của', 'và', 'các', 'không', 'với', 'được', 'trong', 'có', 'là', 'việt']
-                    potential_vietnamese = any(marker in text.lower() for marker in vietnamese_markers)
-                    
-                    if not potential_vietnamese:
-                        # More aggressive cleaning for severe encoding issues
-                        text = re.sub(r'[^\x20-\x7E\s]', '', text)  # Keep only basic ASCII and whitespace
-                    else:
-                        tool_report_print("Info:", "Detected potential Vietnamese content, preserving special characters")
-                
-                # Replace consecutive replacement characters with a single one
-                text = re.sub(r'�{2,}', '�', text)
-                
-                # Remove null bytes that might have been introduced
-                text = text.replace('\x00', '')
-                
-                return text
-            except Exception as e:
-                tool_report_print("Warning:", f"Error in sanitize_content: {str(e)}")
-                # Provide a basic fallback if regex fails
-                return text.replace('\x00', '').replace('�', '')
-        
-        def try_wayback_machine(target_url, original_error=None):
-            """Try to get content from Internet Archive's Wayback Machine as a fallback"""
-            try:
-                tool_report_print("Direct access failed:", 
-                                 f"Trying to retrieve from Wayback Machine archive...",
-                                 is_error=True)
-                
-                # First, get the latest snapshot URL from the Wayback Machine API
-                import json
-                wayback_api_url = f"https://archive.org/wayback/available?url={target_url}"
-                response = requests.get(wayback_api_url, timeout=timeout)
-                data = response.json()
-                
-                # Check if we have a snapshot
-                if data and 'archived_snapshots' in data and 'closest' in data['archived_snapshots']:
-                    archive_url = data['archived_snapshots']['closest']['url']
-                    
-                    # Get the content from the archive
-                    tool_report_print("Archive found:", f"Retrieving from {archive_url}")
-                    archive_response = requests.get(archive_url, headers=headers, timeout=timeout)
-                    archive_response.raise_for_status()
-                    
-                    # Note: Archive.org adds its own headers/footers, so we need to extract the main content
-                    archive_soup = BeautifulSoup(archive_response.content, 'lxml')
-                    
-                    # Look for the archived content frame - it's usually in an iframe with id="playback"
-                    # or the main content is in a specific div structure
-                    main_content = archive_soup.find(id="playback")
-                    if main_content and main_content.find('iframe'):
-                        # Need to retrieve the iframe source
-                        iframe_src = main_content.find('iframe').get('src')
-                        if (iframe_src):
-                            if iframe_src.startswith('http'):
-                                full_url = iframe_src
-                            else:
-                                full_url = f"https://web.archive.org{iframe_src}"
-                                
-                            iframe_response = requests.get(full_url, headers=headers, timeout=timeout)
-                            iframe_response.raise_for_status()
-                            return iframe_response.content, True
-                    else:
-                        # Try to extract the main content directly
-                        return archive_response.content, True
-                
-                return None, False
-            except Exception as e:
-                tool_report_print("Archive retrieval failed:", str(e), is_error=True)
-                if original_error:
-                    return None, False
-                else:
-                    return None, False
-    
-        # Add debug output when starting
-        print(f"Fetching content from URL: {url}")
-        
-        # Parse the URL to check if it's valid
         parsed_url = urlparse(url)
-        if not parsed_url.scheme or not parsed_url.netloc:
-            raise ValueError(f"Invalid URL format: {url}")
-            
-        # Add protocol if missing
-        if not parsed_url.scheme:
-            url = "https://" + url
-            tool_report_print("URL Update:", f"Added https:// to URL: {url}")
-        
-        # Check if this is a PDF file before proceeding
-        is_pdf = False
-        if url.lower().endswith('.pdf') or '/pdf/' in url.lower():
-            is_pdf = True
-            tool_report_print("URL Type:", "Detected PDF file")
-        
-        raw_content = None
-        used_archive = False
-        encoding_used = None
-        
-        # Try direct access first
-        try:
-            # First attempt with normal request
-            response = requests.get(url, headers=headers, timeout=timeout)
-            response.raise_for_status()
-            
-            # Check content type - PDF detection
-            if not is_pdf and 'application/pdf' in response.headers.get('Content-Type', '').lower():
-                is_pdf = True
-                tool_report_print("Content Type:", "Detected PDF content from headers")
-                
-        except requests.exceptions.HTTPError as e:
-            # If we get a 403 Forbidden or 429 Too Many Requests, try with a different approach
-            if e.response.status_code in [403, 429, 500, 502, 503, 504]:
-                # First, try with different headers
-                tool_report_print("Initial request failed:", f"Status code: {e.response.status_code}. Trying with different headers...", is_error=True)
-                
-                headers['User-Agent'] = random.choice([ua for ua in user_agents if ua != headers['User-Agent']])
-                headers['Referer'] = "https://www.google.com/"
-                
-                # Add a small delay to avoid rate limiting
-                time.sleep(2)
-                
-                try:
-                    response = requests.get(url, headers=headers, timeout=timeout)
-                    response.raise_for_status()
-                except requests.exceptions.HTTPError as inner_e:
-                    # If that also fails with 403/429, try Internet Archive
-                    if inner_e.response.status_code in [403, 429, 451]:
-                        archive_content, archive_success = try_wayback_machine(url, inner_e)
-                        if archive_success and archive_content:
-                            raw_content = archive_content
-                            used_archive = True
-                        else:
-                            raise inner_e
-                    else:
-                        raise inner_e
+        clean_url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}"
+        if parsed_url.query:
+            # Keep essential query params, remove common tracking ones
+            query_params = parsed_url.query.split("&")
+            clean_params = []
+            for param in query_params:
+                if not param.startswith(('utm_', 'fbclid', 'gclid', 'msclkid')):
+                    clean_params.append(param)
+            if clean_params:
+                clean_url += '?' + '&'.join(clean_params)
+        url = clean_url
+    except Exception as e:
+        tool_report_print("Warning:", f"Error cleaning URL: {str(e)}")
+    
+    # Check cache if enabled
+    if use_cache:
+        cached_result = _get_cached_page(url)
+        if cached_result:
+            # Check if cache is still valid
+            cache_time = datetime.fromisoformat(cached_result.get('timestamp', '2000-01-01'))
+            if cache_time > datetime.now() - timedelta(hours=cache_expiry_hours):
+                tool_report_print("Cache:", "Retrieved content from cache")
+                return cached_result
             else:
-                raise e
-                
-        # If we didn't get content from archive
-        if raw_content is None:  
-            raw_content = response.content
-            
-            # Try to get encoding from response headers first
-            if response.encoding and response.encoding.upper() != 'ISO-8859-1':  # ISO-8859-1 is often the default fallback
-                encoding_used = response.encoding
-                tool_report_print("Encoding:", f"Using encoding from response headers: {encoding_used}")
-        
+                tool_report_print("Cache:", "Cache expired, fetching fresh content")
+    
+    # Determine the best method to fetch the content based on site capabilities
+    domain = urlparse(url).netloc
+    
+    # Check if this domain has been marked as requiring JavaScript
+    js_required = JS_REQUIRED_SITES.get(domain, False)
+    if '.js' in url.lower() or 'javascript:' in url.lower():
+        # Direct JavaScript file, don't try to render
+        js_required = False
+        render_js = False
+    
+    # Check if this is a known PDF or other document
+    is_document = _is_document_url(url)
+    if is_document:
+        # Don't use JavaScript rendering for documents
+        js_required = False
+        render_js = False
+    
+    # Try different methods in sequence based on site capabilities
+    methods_to_try = _determine_fetch_methods(
+        url=url,
+        js_required=js_required,
+        bypass_bot_protection=bypass_bot_protection,
+        render_js=render_js,
+        is_document=is_document
+    )
+    
+    for method_name, method_func, method_params in methods_to_try:
         try:
-            # For any request exception, try the archive as a fallback
-            if raw_content is None:
-                raise requests.exceptions.RequestException("No content retrieved")
-        except requests.exceptions.RequestException as direct_e:
-            # Try the archive
-            archive_content, archive_success = try_wayback_machine(url, direct_e)
-            if archive_success and archive_content:
-                raw_content = archive_content
-                used_archive = True
-            else:
-                raise direct_e
-        
-        # After getting content but before parsing, check if we need to handle PDF content
-        if is_pdf:
-            try:
-                import io
-                # Try to use PyPDF2 first
-                try:
-                    from PyPDF2 import PdfReader
-                    
-                    # Create a PDF reader object from the content
-                    pdf_file = io.BytesIO(raw_content)
-                    pdf_reader = PdfReader(pdf_file)
-                    
-                    # Extract text from all pages
-                    pdf_text = []
-                    for page_num in range(len(pdf_reader.pages)):
-                        page = pdf_reader.pages[page_num]
-                        pdf_text.append(page.extract_text())
-                    
-                    # Join all pages with separator
-                    content_text = "\n\n--- Page Break ---\n\n".join(pdf_text)
-                    tool_report_print("PDF Processing:", f"Successfully extracted text from {len(pdf_reader.pages)} pages using PyPDF2")
-                    
-                except ImportError:
-                    # If PyPDF2 is not available, try pdfplumber
-                    try:
-                        import pdfplumber
-                        
-                        # Create a PDF plumber object
-                        pdf_file = io.BytesIO(raw_content)
-                        with pdfplumber.open(pdf_file) as pdf:
-                            pdf_text = []
-                            for page in pdf.pages:
-                                text = page.extract_text() or ""
-                                pdf_text.append(text)
-                                
-                            content_text = "\n\n--- Page Break ---\n\n".join(pdf_text)
-                            tool_report_print("PDF Processing:", f"Successfully extracted text from {len(pdf.pages)} pages using pdfplumber")
-                    except ImportError:
-                        # If neither is available, inform the user
-                        return "This URL points to a PDF file, but PDF text extraction libraries (PyPDF2 or pdfplumber) aren't available. Please install one of these libraries or use a different URL."
-                    
-            except Exception as pdf_error:
-                tool_report_print("PDF Processing Error:", str(pdf_error), is_error=True)
-                return f"Error extracting text from PDF: {str(pdf_error)}. The URL points to a PDF file, but text extraction failed."
-        else:
-            # Detect and decode the content with proper encoding
-            decoded_content, detected_encoding = detect_and_decode_content(raw_content)
-            if decoded_content is None or detected_encoding is None:
-                tool_report_print("Error:", "Failed to decode content with any encoding", is_error=True)
-                # Try the fallback method
-                return _fallback_website_content(url)
+            tool_report_print("Trying:", f"Method: {method_name}")
+            method_result = method_func(url=url, timeout=timeout, **method_params)
             
-            encoding_used = detected_encoding
-            tool_report_print("Encoding:", f"Content decoded using {encoding_used} encoding")
-            
-            # Check for encoding issues or binary content
-            has_encoding_issues = False
-            try:
-                if '�' in decoded_content[:500] or any(c in decoded_content[:1000] for c in ['\uFFFD', '\x00']):
-                    tool_report_print("Warning:", "Replacement characters detected, possible encoding issues", is_error=True)
-                    has_encoding_issues = True
-            except Exception as e:
-                tool_report_print("Warning:", f"Error checking for encoding issues: {str(e)}")
-            
-            # Clean content of problematic characters
-            decoded_content = sanitize_content(decoded_content)
-            
-            # Parse the HTML
-            try:
-                soup = BeautifulSoup(decoded_content, 'lxml')
-            except Exception as parse_error:
-                # If parsing fails with the detected encoding, try a more aggressive approach
-                tool_report_print("Error:", f"Failed to parse HTML: {str(parse_error)}", is_error=True)
-                tool_report_print("Action:", "Trying more aggressive content sanitization")
+            if method_result['success']:
+                result.update(method_result)
                 
-                # Force decode with latin1 which should always work
-                decoded_content = raw_content.decode('latin1', errors='ignore')
-                decoded_content = sanitize_content(decoded_content)
+                # Update site capability information for future requests
+                if domain not in SITE_CAPABILITIES:
+                    SITE_CAPABILITIES[domain] = {'preferred_method': method_name}
                 
-                try:
-                    soup = BeautifulSoup(decoded_content, 'lxml')
-                except Exception as second_parse_error:
-                    # If parsing still fails, try the fallback method
-                    return _fallback_website_content(url)
-        
-            # If we used archive.org, try to clean up archive-specific elements
-            if used_archive:
-                for element in soup.select('.wb-header, #wm-ipp-base, #donato'):
-                    if element:
-                        element.decompose()
+                # Process the content according to extract_mode
+                if extract_mode == 'text':
+                    result['content'] = _extract_readable_text(result['content'])
+                elif extract_mode == 'markdown':
+                    result['content'] = _convert_to_markdown(result['content'])
+                # 'html' mode keeps the HTML content as is
                 
-                tool_report_print("Source:", "Content retrieved from Internet Archive's Wayback Machine")
-                    
-            # Remove script, style, and other non-content elements
-            for element in soup(['script', 'style', 'meta', 'noscript', 'header', 'footer', 'nav', 'aside', 'iframe', 'svg']):
-                element.decompose()
+                # Extract links if requested
+                if extract_links:
+                    result['links'] = _extract_links(result['content'], url)
                 
-            # Check if content seems too short, which might indicate an anti-scraping page
-            body_text = soup.body.get_text(strip=True) if soup.body else ""
-            if len(body_text) < 200:
-                tool_report_print("Warning:", "Retrieved content is very short (<200 chars), likely not the full page", is_error=True)
-                if "captcha" in body_text.lower():
-                    tool_report_print("Warning:", "Website may be showing a CAPTCHA page or anti-bot measures", is_error=True)
-                    # Try the fallback method
-                    return _fallback_website_content(url)
-                else:
-                    tool_report_print("Warning:", "Retrieved content is minimal, might be due to access restrictions or JavaScript-heavy page", is_error=True)
-            
-            # Process based on extraction mode
-            if (extract_mode == "markdown"):
-                # A simple markdown conversion that preserves links and headers
-                result = []
+                # Cache the successful result if caching is enabled
+                if use_cache:
+                    _cache_page(url, result)
                 
-                for elem in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li']):
-                    text = elem.get_text(strip=True)
-                    if not text:
-                        continue
-                        
-                    # Handle headings
-                    if elem.name.startswith('h') and len(elem.name) == 2:
-                        level = int(elem.name[1])
-                        result.append('#' * level + ' ' + text)
-                    # Handle links
-                    elif elem.find('a'):
-                        for a in elem.find_all('a'):
-                            href = a.get('href', '')
-                            if href:
-                                # Handle relative URLs
-                                if href.startswith('/'):
-                                    href = f"{parsed_url.scheme}://{parsed_url.netloc}{href}"
-                                link_text = a.get_text(strip=True)
-                                if link_text:
-                                    a.replace_with(f'[{link_text}]({href})')
-                        result.append(elem.get_text(strip=True))
-                    else:
-                        result.append(text)
-                        
-                content_text = '\n\n'.join(result)
-            else:
-                # Default text mode - with better formatting
-                # Remove excessive whitespace and newlines
-                for br in soup.find_all('br'):
-                    br.replace_with('\n')
-                    
-                content_text = soup.get_text(separator='\n\n', strip=True)
+                return result
                 
-                # Clean up the content: remove multiple newlines and spaces
-                content_text = re.sub(r'\n{3,}', '\n\n', content_text)  # Replace 3+ newlines with 2
-                content_text = re.sub(r' {2,}', ' ', content_text)      # Replace 2+ spaces with 1
-            
-            # Final check for encoding issues
-            try:
-                # Try to encode and then decode the content back - this can catch encoding issues
-                test_encode = content_text.encode('utf-8')
-                test_decode = test_encode.decode('utf-8')
-                
-                if test_decode != content_text:
-                    tool_report_print("Warning:", "Character encoding inconsistency detected, applying additional sanitization", is_error=True)
-                    content_text = sanitize_content(content_text)
-                    has_encoding_issues = True
-            except Exception as encoding_error:
-                tool_report_print("Warning:", f"Final encoding check failed: {str(encoding_error)}", is_error=True)
-                content_text = sanitize_content(content_text)
-                has_encoding_issues = True
-        
-        # Truncate if content is very long
-        if len(content_text) > 50000:
-            content_text = content_text[:50000] + "\n\n[Content truncated due to length...]"
-            tool_report_print("Notice:", "Content was truncated because it exceeded 50,000 characters")
-            
-        # Check if the final content is empty or appears to be gibberish
-        if not content_text or len(content_text.strip()) < 10:  # At least 10 chars to be considered non-empty
-            tool_report_print("Error:", "Extraction resulted in empty content", is_error=True)
-            # Try the fallback method
-            return _fallback_website_content(url)
-        
-        # Check for gibberish content (high concentration of rare characters)
-        gibberish_detected = False
-        try:
-            # Count non-ASCII characters or unusual sequences in the first part of content
-            gibberish_chars = len(re.findall(r'[^\x20-\x7E\s.,;:!?\'"()[\]{}]', content_text[:1000]))
-            gibberish_ratio = gibberish_chars / min(len(content_text[:1000]), 1000) if content_text else 0
-            
-            replacement_ratio = content_text[:1000].count('�') / min(len(content_text[:1000]), 1000) if content_text else 0
-            
-            # Better gibberish detection - look for random-looking character sequences
-            # FIXED: Use a safer regex pattern that doesn't use \p which causes issues
-            random_char_sequences = len(re.findall(r'[^\s\w]{5,}', content_text[:1000]))
-            
-            # Make a smarter decision about Vietnamese content with diacritics vs gibberish
-            vietnamese_markers = ['của', 'và', 'các', 'không', 'với', 'được', 'trong', 'có', 'là', 'việt', 'người']
-            potential_vietnamese = any(marker in content_text.lower() for marker in vietnamese_markers)
-            
-            # Adjust thresholds for Vietnamese content which legitimately has many diacritics
-            gibberish_threshold = 0.4 if potential_vietnamese else 0.3
-            
-            if ((gibberish_ratio > gibberish_threshold and not potential_vietnamese) or 
-                replacement_ratio > 0.1 or 
-                random_char_sequences > 5):
-                
-                gibberish_detected = True
-                tool_report_print("Error:", f"Content appears to be gibberish or incorrectly decoded ({gibberish_ratio:.1%} unusual characters, {replacement_ratio:.1%} replacement characters)", is_error=True)
-                
-                # Try the fallback method
-                return _fallback_website_content(url)
         except Exception as e:
-            tool_report_print("Warning:", f"Error checking for gibberish content: {str(e)}")
+            tool_report_print("Method failed:", f"{method_name}: {str(e)}", is_error=True)
+            continue
+    
+    # If we've tried all methods and none worked, try using the Internet Archive
+    try:
+        tool_report_print("Trying:", "Internet Archive Wayback Machine")
+        archive_result = _get_from_wayback(url, timeout)
+        if archive_result['success']:
+            result.update(archive_result)
+            result['source'] = "archive"
+            
+            # Process content according to extract_mode
+            if extract_mode == 'text':
+                result['content'] = _extract_readable_text(result['content'])
+            elif extract_mode == 'markdown':
+                result['content'] = _convert_to_markdown(result['content'])
+                
+            # Extract links if requested
+            if extract_links:
+                result['links'] = _extract_links(result['content'], url)
+                
+            # Cache the archive result if caching is enabled
+            if use_cache:
+                _cache_page(url, result)
+                
+            return result
+    except Exception as e:
+        tool_report_print("Archive failed:", str(e), is_error=True)
+    
+    # If all methods failed
+    result['error'] = "All fetch methods failed for this URL"
+    result['success'] = False
+    tool_report_print("Error:", "Could not retrieve content by any available method", is_error=True)
+    return result
+
+def _determine_fetch_methods(url, js_required, bypass_bot_protection, render_js, is_document):
+    """
+    Determine the sequence of fetch methods to try based on URL analysis and available tools.
+    Returns a list of tuples: (method_name, method_function, method_params)
+    """
+    methods = []
+    domain = urlparse(url).netloc
+    
+    # If this is a document (PDF, etc.), prioritize direct download
+    if is_document:
+        methods.append(("direct_download", _fetch_document, {}))
+    
+    # Get the preferred method for this domain if known
+    preferred_method = SITE_CAPABILITIES.get(domain, {}).get('preferred_method', None)
+    
+    # If JavaScript is required or we should render it
+    if js_required or render_js:
+        # Use undetected_chromedriver for high bot protection sites if available
+        if bypass_bot_protection and UNDETECTED_CHROME_AVAILABLE:
+            methods.append(("undetected_chrome", _fetch_with_undetected_chrome, {"stealth": True}))
         
-        # Add a final sanity check before returning content
-        if has_encoding_issues and not potential_vietnamese:
-            # Do one last check for readable text
-            ascii_text_ratio = len(re.findall(r'[a-zA-Z0-9\s.,;:!?\'"()[\]{}]', content_text[:1000])) / min(len(content_text[:1000]), 1000)
-            if ascii_text_ratio < 0.5:  # Less than 50% readable ASCII
-                tool_report_print("Error:", "Final content appears to have encoding issues", is_error=True)
-                # Try the fallback method
-                return _fallback_website_content(url)
+        # Add Selenium method if available
+        if SELENIUM_AVAILABLE:
+            methods.append(("selenium", _fetch_with_selenium, {"headless": not bypass_bot_protection}))
+            
+        # Add requests-html renderer for lighter JS rendering
+        if REQUESTS_HTML_AVAILABLE:
+            methods.append(("requests_html", _fetch_with_requests_html, {}))
+    
+    # Always add standard requests method as it's the fastest
+    methods.append(("requests", _fetch_with_requests, {"retry": True}))
+    
+    # Add a specialized anti-bot method if needed
+    if bypass_bot_protection:
+        methods.append(("anti_bot", _fetch_with_anti_bot_measures, {}))
+    
+    # If we have a known preferred method for this domain, prioritize it
+    if preferred_method:
+        methods.sort(key=lambda m: 0 if m[0] == preferred_method else 1)
         
-        tool_report_print("Status:", f"Webpage content fetched successfully using {encoding_used} encoding")
-        return content_text
+    return methods
+
+def _fetch_with_requests(url, timeout, retry=True):
+    """Fetch content using the standard requests library"""
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    # Get a good user agent
+    headers = _get_request_headers()
+    
+    try:
+        # Make the request
+        response = requests.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
         
-    except requests.exceptions.RequestException as e:
-        error_message = f"Error fetching webpage content: {e}"
-        tool_report_print("Error fetching webpage:", str(e), is_error=True)
+        # Check if the response is binary content
+        content_type = response.headers.get('Content-Type', '').lower()
+        if _is_binary_content(content_type):
+            result['content'] = f"Binary content detected: {content_type}"
+            result['success'] = False
+            result['error'] = "Content is binary and cannot be displayed as text"
+            return result
         
-        # Provide more helpful error messages based on status code
-        if hasattr(e, 'response') and e.response is not None:
-            status_code = e.response.status_code
-            if status_code == 403:
-                error_message += "\nThe website is blocking access. This could be due to bot protection or geographical restrictions."
-            elif status_code == 404:
-                error_message += "\nThe page does not exist. Please check the URL for typos."
-            elif status_code == 429:
-                error_message += "\nToo many requests sent to this website. Try again later."
-            elif status_code >= 500:
-                error_message += "\nThe server is experiencing issues. This is not a problem with your request. Try again later."
+        # Detect and decode content with proper encoding
+        content = _decode_content(response.content)
         
-        # Check for common network issues and provide better explanations
-        if "Timeout" in str(e):
-            error_message += "\nThe website took too long to respond. It might be down or have connectivity issues."
-        elif "SSLError" in str(e):
-            error_message += "\nThere was a security issue when connecting to this website. It might have an invalid SSL certificate."
-        elif "ConnectionError" in str(e):
-            error_message += "\nCould not establish a connection to the website. It might be down or unreachable."
+        # Parse content
+        soup = BeautifulSoup(content, 'lxml')
         
-        # Try the fallback method
-        tool_report_print("Trying fallback method...", "", is_error=False)
-        return _fallback_website_content(url)
+        # Get title
+        title_tag = soup.find('title')
+        if title_tag:
+            result['title'] = title_tag.get_text(strip=True)
+        
+        # Check if it's likely a bot protection page
+        if _is_bot_protection_page(content):
+            result['error'] = "Bot protection detected"
+            result['success'] = False
+            return result
+            
+        # Store the HTML content
+        result['content'] = str(soup)
+        result['success'] = True
+        
+        return result
+        
+    except requests.exceptions.HTTPError as e:
+        if retry and hasattr(e, 'response') and e.response.status_code in [403, 429, 503]:
+            # Try again with different headers
+            tool_report_print("Retrying:", f"Got {e.response.status_code}, trying with different headers")
+            time.sleep(2)  # Small delay
+            
+            # Different headers
+            headers = _get_request_headers(advanced=True)
+            
+            try:
+                response = requests.get(url, headers=headers, timeout=timeout)
+                response.raise_for_status()
+                
+                # Process content as above
+                content = _decode_content(response.content)
+                soup = BeautifulSoup(content, 'lxml')
+                
+                if title_tag := soup.find('title'):
+                    result['title'] = title_tag.get_text(strip=True)
+                
+                if _is_bot_protection_page(content):
+                    result['error'] = "Bot protection detected"
+                    result['success'] = False
+                else:
+                    result['content'] = str(soup)
+                    result['success'] = True
+                
+                return result
+                
+            except Exception as retry_error:
+                result['error'] = f"Retry failed: {str(retry_error)}"
+                result['success'] = False
+                return result
+        else:
+            result['error'] = str(e)
+            result['success'] = False
+            return result
+            
+    except Exception as e:
+        result['error'] = str(e)
+        result['success'] = False
+        return result
+
+def _fetch_with_selenium(url, timeout, headless=True):
+    """Fetch content using Selenium WebDriver with Chrome"""
+    if not SELENIUM_AVAILABLE:
+        return {'success': False, 'error': "Selenium not available"}
+    
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    driver = None
+    try:
+        # Set up Chrome options
+        chrome_options = Options()
+        if headless:
+            chrome_options.add_argument("--headless=new")
+        
+        # Add common options to make browser more stable
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-in-process-stack-traces")
+        
+        # Add stealth options to avoid detection
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # Set a realistic user agent
+        user_agent = _get_user_agent()
+        chrome_options.add_argument(f"--user-agent={user_agent}")
+        
+        # Initialize driver
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(timeout)
+        
+        # Add window size to mimic a real browser
+        driver.set_window_size(1366, 768)
+        
+        # Navigate to URL
+        driver.get(url)
+        
+        # Wait for page to load
+        WebDriverWait(driver, timeout).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
+        
+        # Additional waiting for dynamic content
+        time.sleep(2)
+        
+        # Execute any needed interactions if bot protection is detected
+        if "captcha" in driver.page_source.lower() or "cloudflare" in driver.page_source.lower():
+            _try_bypass_protection(driver)
+            
+            # Wait again after bypass attempt
+            time.sleep(3)
+        
+        # Get the title
+        result['title'] = driver.title
+        
+        # Get the content
+        result['content'] = driver.page_source
+        result['success'] = True
+        
+        return result
         
     except Exception as e:
-        tool_report_print("Error processing webpage:", str(e), is_error=True)
-        # Try the fallback method
-        return _fallback_website_content(url)
+        result['error'] = f"Selenium error: {str(e)}"
+        result['success'] = False
+        return result
+        
+    finally:
+        # Make sure to quit the driver
+        if driver:
+            driver.quit()
 
-def _selenium_get_website_content(
+def _fetch_with_undetected_chrome(url, timeout, stealth=True):
+    """Fetch content using undetected_chromedriver to bypass strong anti-bot measures"""
+    if not UNDETECTED_CHROME_AVAILABLE:
+        return {'success': False, 'error': "undetected_chromedriver not available"}
+    
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    driver = None
+    try:
+        # Configure undetected Chrome
+        options = uc.ChromeOptions()
+        
+        # Add minimal arguments to avoid detection
+        options.add_argument("--disable-extensions")
+        
+        # Create the driver
+        driver = uc.Chrome(options=options, headless=False)  # Headless often doesn't work with undetected_chromedriver
+        driver.set_page_load_timeout(timeout)
+        
+        # Navigate to URL
+        driver.get(url)
+        
+        # Wait for page to load
+        time.sleep(5)  # Undetected Chrome sometimes needs more time
+        
+        # Get the title
+        result['title'] = driver.title
+        
+        # Get the content
+        result['content'] = driver.page_source
+        result['success'] = True
+        
+        return result
+        
+    except Exception as e:
+        result['error'] = f"Undetected Chrome error: {str(e)}"
+        result['success'] = False
+        return result
+        
+    finally:
+        # Make sure to quit the driver
+        if driver:
+            driver.quit()
+
+def _fetch_with_requests_html(url, timeout):
+    """Fetch content using requests-html for lightweight JavaScript rendering"""
+    if not REQUESTS_HTML_AVAILABLE:
+        return {'success': False, 'error': "requests-html not available"}
+    
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    try:
+        # Create session
+        session = HTMLSession()
+        
+        # Set headers
+        session.headers.update(_get_request_headers())
+        
+        # Make request
+        response = session.get(url, timeout=timeout)
+        
+        # Render JavaScript
+        response.html.render(timeout=timeout)
+        
+        # Get the title
+        title_elem = response.html.find('title', first=True)
+        if title_elem:
+            result['title'] = title_elem.text
+        
+        # Get the content
+        result['content'] = response.html.html
+        result['success'] = True
+        
+        return result
+        
+    except Exception as e:
+        result['error'] = f"requests-html error: {str(e)}"
+        result['success'] = False
+        return result
+
+def _fetch_with_anti_bot_measures(url, timeout):
+    """Fetch content with specialized anti-bot measures"""
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    try:
+        # Create a session to maintain cookies
+        session = requests.Session()
+        
+        # Set very realistic headers
+        headers = _get_request_headers(advanced=True)
+        session.headers.update(headers)
+        
+        # First make a request to the domain root to get cookies
+        parsed_url = urlparse(url)
+        domain_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        
+        # GET request to domain root
+        session.get(domain_url, timeout=timeout/2)
+        
+        # Small delay to seem more human
+        time.sleep(1.5)
+        
+        # Now make the actual request
+        response = session.get(url, timeout=timeout)
+        response.raise_for_status()
+        
+        # Decode content
+        content = _decode_content(response.content)
+        
+        # Parse content
+        soup = BeautifulSoup(content, 'lxml')
+        
+        # Get title
+        title_tag = soup.find('title')
+        if title_tag:
+            result['title'] = title_tag.get_text(strip=True)
+        
+        # Check if it's still a bot protection page
+        if _is_bot_protection_page(content):
+            result['error'] = "Still detected as bot despite countermeasures"
+            result['success'] = False
+            return result
+        
+        # Store content
+        result['content'] = str(soup)
+        result['success'] = True
+        
+        return result
+        
+    except Exception as e:
+        result['error'] = f"Anti-bot method error: {str(e)}"
+        result['success'] = False
+        return result
+
+def _fetch_document(url, timeout):
+    """Fetch document content (PDF, DOC, etc.) and extract text"""
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "direct",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    try:
+        # Get document file
+        headers = _get_request_headers()
+        response = requests.get(url, headers=headers, timeout=timeout, stream=True)
+        response.raise_for_status()
+        
+        # Check content type
+        content_type = response.headers.get('Content-Type', '').lower()
+        
+        # Get filename from URL or headers
+        filename = None
+        if 'Content-Disposition' in response.headers:
+            disposition = response.headers['Content-Disposition']
+            filename_match = re.search(r'filename="?([^";]+)"?', disposition)
+            if filename_match:
+                filename = filename_match.group(1)
+        
+        if not filename:
+            # Try to get from URL
+            path = urlparse(url).path
+            if path:
+                filename = path.split('/')[-1]
+        
+        # Extract text based on document type
+        if 'application/pdf' in content_type or url.lower().endswith('.pdf'):
+            text = _extract_pdf_text(response.content)
+            result['content'] = text
+            result['title'] = filename or "PDF Document"
+            result['success'] = True
+            
+        elif any(url.lower().endswith(ext) for ext in ['.doc', '.docx']):
+            result['content'] = f"Document file detected: {filename or url}"
+            result['title'] = filename or "Word Document"
+            result['success'] = False
+            result['error'] = "Word document extraction not supported yet"
+            
+        else:
+            # For other document types
+            result['content'] = f"Document file detected: {filename or url} ({content_type})"
+            result['title'] = filename or "Document"
+            result['success'] = False
+            result['error'] = f"Document type ({content_type}) extraction not supported"
+        
+        return result
+        
+    except Exception as e:
+        result['error'] = f"Document extraction error: {str(e)}"
+        result['success'] = False
+        return result
+
+def _get_from_wayback(url, timeout):
+    """Retrieve content from the Internet Archive's Wayback Machine"""
+    result = {
+        'content': "",
+        'title': "",
+        'success': False,
+        'source': "archive",
+        'error': "",
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    try:
+        # Get the latest snapshot from Wayback API
+        wayback_api_url = f"https://archive.org/wayback/available?url={url}"
+        api_response = requests.get(wayback_api_url, timeout=timeout)
+        api_response.raise_for_status()
+        
+        data = api_response.json()
+        
+        # Check if we have a snapshot
+        if data and 'archived_snapshots' in data and 'closest' in data['archived_snapshots']:
+            archive_url = data['archived_snapshots']['closest']['url']
+            
+            # Get the content from the archive
+            tool_report_print("Archive found:", f"Retrieving from {archive_url}")
+            
+            # Get headers for the archive request
+            headers = _get_request_headers()
+            
+            # Fetch the archived page
+            archive_response = requests.get(archive_url, headers=headers, timeout=timeout)
+            archive_response.raise_for_status()
+            
+            # Decode content
+            content = _decode_content(archive_response.content)
+            
+            # Parse with BeautifulSoup
+            soup = BeautifulSoup(content, 'lxml')
+            
+            # Remove Wayback Machine UI elements
+            for element in soup.select('.wb-header, #wm-ipp-base, #donato'):
+                if element:
+                    element.decompose()
+            
+            # Get the title
+            title_tag = soup.find('title')
+            if title_tag:
+                result['title'] = title_tag.get_text(strip=True)
+            
+            # Store content
+            result['content'] = str(soup)
+            result['success'] = True
+            
+            return result
+        else:
+            result['error'] = "No archive found in Wayback Machine"
+            result['success'] = False
+            return result
+            
+    except Exception as e:
+        result['error'] = f"Wayback Machine error: {str(e)}"
+        result['success'] = False
+        return result
+
+# Helper functions
+
+def _get_request_headers(advanced=False):
+    """Generate realistic browser headers"""
+    user_agent = _get_user_agent()
+    
+    # Basic headers
+    headers = {
+        'User-Agent': user_agent,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+    }
+    
+    # Add more realistic headers if advanced mode
+    if advanced:
+        # Common referers
+        referers = [
+            'https://www.google.com/',
+            'https://www.bing.com/',
+            'https://duckduckgo.com/',
+            'https://www.reddit.com/',
+            'https://www.facebook.com/',
+            'https://www.twitter.com/',
+            'https://www.linkedin.com/'
+        ]
+        
+        headers['Referer'] = random.choice(referers)
+        
+        # Add random client hints
+        if 'Chrome' in user_agent:
+            headers['Sec-CH-UA'] = '"Google Chrome";v="133", "Chromium";v="133", "Not-A.Brand";v="99"'
+            headers['Sec-CH-UA-Mobile'] = random.choice(['?0', '?1'])
+            headers['Sec-CH-UA-Platform'] = random.choice(['"Windows"', '"macOS"', '"Linux"', '"Android"', '"iOS"'])
+    
+    return headers
+
+def _get_user_agent():
+    """Get a realistic user agent string"""
+    if UA_GENERATOR_AVAILABLE:
+        try:
+            ua = UserAgent()
+            return ua.random
+        except Exception:
+            pass
+    
+    # Fallback to our list
+    return random.choice(FALLBACK_USER_AGENTS)
+
+def _decode_content(content):
+    """Intelligently detect encoding and decode content"""
+    # Try to detect encoding with chardet if available
+    if CHARDET_AVAILABLE:
+        try:
+            detection = chardet.detect(content)
+            if detection and detection['confidence'] > 0.7:
+                try:
+                    return content.decode(detection['encoding'])
+                except (UnicodeDecodeError, LookupError):
+                    # If detected encoding failed, continue to other methods
+                    pass
+        except Exception:
+            pass
+    
+    # Try common encodings
+    encodings = ['utf-8', 'latin1', 'utf-16', 'windows-1252', 'iso-8859-1']
+    for encoding in encodings:
+        try:
+            return content.decode(encoding)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    
+    # Last resort - force with replacement
+    return content.decode('utf-8', errors='replace')
+
+def _extract_readable_text(html_content):
+    """Extract clean readable text from HTML content"""
+    try:
+        soup = BeautifulSoup(html_content, 'lxml')
+        
+        # Remove script, style and other non-content elements
+        for element in soup(['script', 'style', 'meta', 'noscript', 'svg']):
+            element.decompose()
+        
+        # For each <br> tag, insert a newline
+        for br in soup.find_all('br'):
+            br.insert_after('\n')
+        
+        # Extract text with proper spacing
+        text = soup.get_text(separator='\n\n', strip=True)
+        
+        # Clean up the text
+        text = re.sub(r'\n{3,}', '\n\n', text)  # Replace multiple newlines with double
+        text = re.sub(r' {2,}', ' ', text)      # Replace multiple spaces
+        
+        return text
+    except Exception as e:
+        tool_report_print("Warning:", f"Error extracting readable text: {str(e)}")
+        # Return a sanitized version of the HTML if extraction fails
+        return re.sub(r'<[^>]+>', ' ', html_content)
+
+def _convert_to_markdown(html_content):
+    """Convert HTML content to markdown format"""
+    try:
+        soup = BeautifulSoup(html_content, 'lxml')
+        
+        # Remove script, style and unwanted elements
+        for element in soup(['script', 'style', 'meta', 'noscript', 'svg']):
+            element.decompose()
+        
+        # Create a result container
+        result = []
+        
+        # Add the title if available
+        title_tag = soup.find('title')
+        if title_tag and title_tag.get_text(strip=True):
+            result.append(f"# {title_tag.get_text(strip=True)}\n")
+        
+        # Process headings
+        for i in range(1, 7):
+            for heading in soup.find_all(f'h{i}'):
+                text = heading.get_text(strip=True)
+                if text:
+                    result.append(f"{'#' * i} {text}\n")
+        
+        # Process paragraphs
+        for p in soup.find_all('p'):
+            text = p.get_text(strip=True)
+            if text:
+                # Handle links in paragraphs
+                for a in p.find_all('a'):
+                    href = a.get('href')
+                    link_text = a.get_text(strip=True)
+                    if href and link_text:
+                        # Make sure href is absolute
+                        if not href.startswith(('http://', 'https://')):
+                            base_url = soup.find('base', href=True)
+                            base = base_url['href'] if base_url else None
+                            href = urljoin(base or '', href)
+                        
+                        # Replace link with markdown format
+                        a_text = str(a)
+                        p_text = str(p)
+                        p_text = p_text.replace(a_text, f"[{link_text}]({href})")
+                        p = BeautifulSoup(p_text, 'lxml').p
+                
+                # Add paragraph text
+                result.append(f"{p.get_text(strip=True)}\n\n")
+        
+        # Process lists
+        for ul in soup.find_all('ul'):
+            for li in ul.find_all('li'):
+                text = li.get_text(strip=True)
+                if text:
+                    result.append(f"* {text}\n")
+            result.append("\n")
+        
+        for ol in soup.find_all('ol'):
+            for i, li in enumerate(ol.find_all('li')):
+                text = li.get_text(strip=True)
+                if text:
+                    result.append(f"{i+1}. {text}\n")
+            result.append("\n")
+        
+        # Join all parts
+        markdown_text = ''.join(result)
+        
+        # Clean up excessive newlines
+        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+        
+        return markdown_text
+    except Exception as e:
+        tool_report_print("Warning:", f"Error converting to markdown: {str(e)}")
+        # Fall back to plain text extraction
+        return _extract_readable_text(html_content)
+
+def _extract_links(html_content, base_url):
+    """Extract and categorize links from HTML content"""
+    links = {
+        'navigation': [],
+        'content': [],
+        'external': [],
+        'social': []
+    }
+    
+    try:
+        soup = BeautifulSoup(html_content, 'lxml')
+        base_domain = urlparse(base_url).netloc
+        
+        # Get all links
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            text = a.get_text(strip=True)
+            
+            # Skip empty, javascript, and fragment-only links
+            if not href or href.startswith('javascript:') or href == '#':
+                continue
+            
+            # Make sure href is absolute
+            if not href.startswith(('http://', 'https://')):
+                href = urljoin(base_url, href)
+            
+            # Check if it's internal or external
+            parsed_href = urlparse(href)
+            is_internal = parsed_href.netloc == base_domain or not parsed_href.netloc
+            
+            # Format the link
+            link_entry = {
+                'text': text or href,
+                'url': href
+            }
+            
+            # Categorize the link
+            if is_internal:
+                # Check if it's likely navigation
+                parent = a.parent
+                grandparent = parent.parent if parent else None
+                
+                is_nav = False
+                if parent and parent.name in ['nav', 'header', 'footer']:
+                    is_nav = True
+                elif grandparent and grandparent.name in ['nav', 'header', 'footer']:
+                    is_nav = True
+                elif a.get('role') == 'navigation' or (parent and parent.get('role') == 'navigation'):
+                    is_nav = True
+                
+                if is_nav:
+                    links['navigation'].append(link_entry)
+                else:
+                    links['content'].append(link_entry)
+            else:
+                # Check if it's a social media link
+                social_domains = ['facebook.com', 'twitter.com', 'linkedin.com', 'instagram.com', 
+                                 'youtube.com', 'pinterest.com', 'tiktok.com']
+                                 
+                is_social = any(domain in parsed_href.netloc for domain in social_domains)
+                
+                if is_social:
+                    links['social'].append(link_entry)
+                else:
+                    links['external'].append(link_entry)
+        
+        # Limit the number of links in each category
+        for category in links:
+            if len(links[category]) > 20:
+                links[category] = links[category][:20]
+                
+        return links
+    except Exception as e:
+        tool_report_print("Warning:", f"Error extracting links: {str(e)}")
+        return links
+
+def _extract_pdf_text(content):
+    """Extract text from PDF content"""
+    try:
+        # Try PyPDF2 first
+        try:
+            from PyPDF2 import PdfReader
+            pdf_file = io.BytesIO(content)
+            pdf_reader = PdfReader(pdf_file)
+            
+            # Extract text from all pages
+            pdf_text = []
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                text = page.extract_text() or ""
+                pdf_text.append(text)
+            
+            return "\n\n--- Page Break ---\n\n".join(pdf_text)
+        except ImportError:
+            # Try pdfplumber if PyPDF2 is not available
+            try:
+                import pdfplumber
+                pdf_file = io.BytesIO(content)
+                with pdfplumber.open(pdf_file) as pdf:
+                    pdf_text = []
+                    for page in pdf.pages:
+                        text = page.extract_text() or ""
+                        pdf_text.append(text)
+                    
+                    return "\n\n--- Page Break ---\n\n".join(pdf_text)
+            except ImportError:
+                return "PDF text extraction requires PyPDF2 or pdfplumber libraries."
+    except Exception as e:
+        return f"Error extracting PDF text: {str(e)}"
+
+def _is_binary_content(content_type):
+    """Check if the content type is binary/non-textual"""
+    binary_types = [
+        'image/', 'audio/', 'video/', 'application/octet-stream', 
+        'application/zip', 'application/x-rar', 'application/x-tar',
+        'application/x-7z', 'application/x-gzip'
+    ]
+    
+    return any(btype in content_type for btype in binary_types)
+
+def _is_document_url(url):
+    """Check if URL appears to be a document file"""
+    document_extensions = ['.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.odt', '.rtf']
+    return any(url.lower().endswith(ext) for ext in document_extensions)
+
+def _is_bot_protection_page(content):
+    """Detect if the page is likely a bot protection/CAPTCHA page"""
+    # Common bot protection indicators in content
+    bot_indicators = [
+        'captcha', 'robot', 'automated', 'bot', 'human verification',
+        'cloudflare', 'ddos', 'protection', 'challenge', 'blocked',
+        'security check', 'prove you are human', "prove you're human",
+        'access denied', 'access to this page has been denied', 
+        'please wait', 'please enable javascript', 'checking your browser',
+        'press & hold', 'press and hold'
+    ]
+    
+    content_lower = content.lower()
+    
+    # Count how many indicators are present
+    indicator_count = sum(1 for indicator in bot_indicators if indicator in content_lower)
+    
+    # If content is short and has multiple indicators, likely a protection page
+    content_length = len(content)
+    if content_length < 10000 and indicator_count >= 2:
+        return True
+        
+    # Check for specific protection services
+    protection_services = [
+        'cloudflare', 'imperva', 'akamai', 'distil', 'perimeterx',
+        'datadome', 'f5', 'incapsula', 'kasada', 'sitelock'
+    ]
+    
+    service_mentions = sum(1 for service in protection_services if service in content_lower)
+    if service_mentions > 0 and indicator_count > 0:
+        return True
+    
+    return False
+
+def _try_bypass_protection(driver):
+    """Try common techniques to bypass bot protection in Selenium"""
+    try:
+        # Look for "I'm human" buttons or checkboxes
+        human_buttons = driver.find_elements(By.XPATH, 
+            "//button[contains(text(), 'human') or contains(text(), 'continue') or contains(text(), 'verify')]")
+        
+        for button in human_buttons:
+            if button.is_displayed():
+                button.click()
+                time.sleep(2)
+                return
+        
+        # Look for CAPTCHA iframes
+        captcha_frames = driver.find_elements(By.CSS_SELECTOR, 
+            "iframe[src*='captcha'], iframe[src*='challenge'], iframe[title*='challenge']")
+        
+        if captcha_frames:
+            # Switch to the frame
+            driver.switch_to.frame(captcha_frames[0])
+            
+            # Try to find and click the checkbox
+            checkboxes = driver.find_elements(By.CSS_SELECTOR, 
+                ".recaptcha-checkbox, input[type='checkbox']")
+            
+            for checkbox in checkboxes:
+                if checkbox.is_displayed():
+                    checkbox.click()
+                    time.sleep(1)
+                    
+            # Switch back
+            driver.switch_to.default_content()
+        
+        # Press and hold simulation for some protections
+        body = driver.find_element(By.TAG_NAME, "body")
+        if "press & hold" in body.text.lower() or "press and hold" in body.text.lower():
+            buttons = driver.find_elements(By.CSS_SELECTOR, "button, .button, [role='button']")
+            
+            for button in buttons:
+                if button.is_displayed():
+                    actions = ActionChains(driver)
+                    actions.click_and_hold(button)
+                    actions.pause(3)  # Hold for 3 seconds
+                    actions.release()
+                    actions.perform()
+                    time.sleep(1)
+    except Exception:
+        # Silently fail - this is just a best effort
+        pass
+
+def _cache_page(url, result):
+    """Save fetched page to cache"""
+    try:
+        # Create a unique filename based on URL
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        cache_path = CACHE_DIR / f"{url_hash}.json"
+        
+        # Save result as JSON
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            # Make a copy to avoid modifying the original
+            cache_data = result.copy()
+            json.dump(cache_data, f)
+            
+    except Exception as e:
+        tool_report_print("Cache warning:", f"Failed to save to cache: {str(e)}")
+
+def _get_cached_page(url):
+    """Get page from cache if available"""
+    try:
+        # Create a unique filename based on URL
+        url_hash = hashlib.md5(url.encode()).hexdigest()
+        cache_path = CACHE_DIR / f"{url_hash}.json"
+        
+        # Check if file exists and is not empty
+        if cache_path.exists() and cache_path.stat().st_size > 0:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+                
+    except Exception as e:
+        tool_report_print("Cache warning:", f"Failed to read from cache: {str(e)}")
+    
+    return None
+
+# For backward compatibility
+def read_website_content(
     url: str, 
     timeout: int = 5, 
     extract_mode: str = "text",
     extract_links: bool = False
 ) -> str:
     """
-    Use Selenium to fetch website content with a real browser.
-    
-    Args:
-        url: The URL to fetch
-        timeout: Timeout in seconds
-        extract_mode: How to extract content (text or markdown)
-        extract_links: Whether to extract and include links from the page
-        
-    Returns:
-        The extracted content as text
-    """
-    driver = None
-    try:
-        # Set up Chrome options for headless browsing
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument(f"--user-agent={DEFAULT_USER_AGENT}")
-        
-        # Initialize the WebDriver
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.set_page_load_timeout(timeout)
-        
-        # Navigate to the URL
-        tool_report_print("Info:", f"Navigating to {url} with Selenium")
-        driver.get(url)
-        
-        # Wait for the page to be fully loaded
-        WebDriverWait(driver, timeout).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        
-        # Let JavaScript execute and content render
-        time.sleep(1)
-        
-        # Check for PDF content
-        if url.lower().endswith('.pdf') or 'content-type: application/pdf' in driver.page_source.lower():
-            tool_report_print("Info:", "Detected PDF content, using specialized PDF processing")
-            # Try to get PDF text content
-            # For PDFs, Selenium may not work well, so fall back to the PDF handler in the existing implementation
-            driver.quit()
-            return _fallback_website_content(url)
-        
-        # Extract content based on mode
-        if extract_mode == "markdown":
-            # Get content in markdown format
-            content_text = _selenium_extract_markdown(driver)
-        else:
-            # Default text mode
-            content_text = driver.find_element(By.TAG_NAME, "body").text
-            
-            # Clean up the content: remove multiple newlines and spaces
-            content_text = re.sub(r'\n{3,}', '\n\n', content_text)
-            content_text = re.sub(r' {2,}', ' ', content_text)
-        
-        # Get the page title if available
-        try:
-            title = driver.title
-            if title and len(title) > 0:
-                content_text = f"# {title}\n\n{content_text}"
-        except:
-            pass
-        
-        # Extract links if requested
-        if extract_links:
-            link_section = _extract_and_categorize_links(driver, url)
-            content_text = f"{content_text}\n\n{link_section}"
-            
-        tool_report_print("Success:", f"Retrieved content from {url} using Selenium")
-        return content_text
-        
-    except SeleniumTimeoutException:
-        tool_report_print("Error:", f"Selenium timed out after {timeout} seconds when loading {url}", is_error=True)
-        if driver:
-            driver.quit()
-        return _fallback_website_content(url)
-        
-    except Exception as e:
-        tool_report_print("Error:", f"Selenium error: {str(e)}", is_error=True)
-        if driver:
-            driver.quit()
-        return _fallback_website_content(url)
-        
-    finally:
-        # Make sure to quit the driver and release resources
-        if driver:
-            driver.quit()
-
-def _extract_and_categorize_links(driver, base_url):
-    """
-    Extract links from the webpage and categorize them.
-    
-    Args:
-        driver: Selenium WebDriver instance
-        base_url: The URL of the page being processed
-        
-    Returns:
-        Formatted string with categorized links
-    """
-    tool_report_print("Info:", "Extracting links from webpage")
-    
-    # Parse the base URL to help determine internal vs external links
-    parsed_base = urlparse(base_url)
-    base_domain = parsed_base.netloc
-    
-    # Initialize link containers
-    navigation_links = []  # For navigation menu, header, footer links
-    content_links = []     # Links within the main content
-    external_links = []    # Links to other domains
-    
-    try:
-        # Find all links
-        links = driver.find_elements(By.TAG_NAME, 'a')
-        
-        # Track unique links to avoid duplicates
-        seen_urls = set()
-        
-        for link in links:
-            try:
-                href = link.get_attribute('href')
-                text = link.text.strip()
-                
-                # Skip invalid or empty links
-                if not href or href.startswith('javascript:') or href == '#':
-                    continue
-                    
-                # Skip already processed links
-                if href in seen_urls:
-                    continue
-                
-                seen_urls.add(href)
-                
-                # Ensure relative links are converted to absolute
-                if not href.startswith(('http://', 'https://')):
-                    href = urljoin(base_url, href)
-                
-                # Check if it's an internal or external link
-                parsed_href = urlparse(href)
-                is_internal = parsed_href.netloc == base_domain or not parsed_href.netloc
-                
-                # Create a formatted link entry with text and URL
-                link_entry = f"- [{text or href}]({href})"
-                
-                # Determine link category based on position and attributes
-                if is_internal:
-                    try:
-                        # Check if link appears to be main navigation or utility link
-                        parent_tag = link.find_element(By.XPATH, './..')
-                        grandparent_tag = parent_tag.find_element(By.XPATH, './..')
-                        
-                        nav_containers = ['nav', 'header', 'footer', 'menu']
-                        
-                        # Check if the link is in a navigation section
-                        in_nav = False
-                        for element in [link, parent_tag, grandparent_tag]:
-                            tag_name = element.tag_name.lower()
-                            element_class = element.get_attribute('class') or ''
-                            element_id = element.get_attribute('id') or ''
-                            
-                            if (tag_name in nav_containers or
-                                any(nav in element_class.lower() for nav in nav_containers) or
-                                any(nav in element_id.lower() for nav in nav_containers)):
-                                in_nav = True
-                                break
-                        
-                        if in_nav:
-                            navigation_links.append(link_entry)
-                        else:
-                            content_links.append(link_entry)
-                    except:
-                        # If we can't determine the category, default to content links
-                        content_links.append(link_entry)
-                else:
-                    external_links.append(link_entry)
-                
-            except Exception as e:
-                # Skip problematic links
-                continue
-        
-        # Remove duplicates (based on URLs) and sort links
-        navigation_links = sorted(list(set(navigation_links)))
-        content_links = sorted(list(set(content_links)))
-        external_links = sorted(list(set(external_links)))
-        
-        # Prepare the output
-        result = []
-        result.append("\n## Website Navigation")
-        
-        if navigation_links:
-            result.append("\n### Navigation Links")
-            result.extend(navigation_links[:15])  # Limit to 15 navigation links
-            if len(navigation_links) > 15:
-                result.append(f"... and {len(navigation_links) - 15} more navigation links")
-        
-        if content_links:
-            result.append("\n### Content Links")
-            result.extend(content_links[:20])  # Limit to 20 content links
-            if len(content_links) > 20:
-                result.append(f"... and {len(content_links) - 20} more content links")
-        
-        if external_links:
-            result.append("\n### External Links")
-            result.extend(external_links[:10])  # Limit to 10 external links
-            if len(external_links) > 10:
-                result.append(f"... and {len(external_links) - 10} more external links")
-        
-        return "\n".join(result)
-    
-    except Exception as e:
-        tool_report_print("Warning:", f"Error extracting links: {str(e)}", is_error=True)
-        return "\n## Website Navigation\nFailed to extract links from the webpage."
-
-def _selenium_extract_markdown(driver):
-    """
-    Extract content from Selenium in markdown format
-    
-    Args:
-        driver: The Selenium WebDriver instance
-        
-    Returns:
-        Content in markdown format
-    """
-    # Find the headings and convert them to markdown
-    result = []
-    
-    # Extract title first
-    try:
-        title = driver.title
-        if title:
-            result.append(f"# {title}\n")
-    except:
-        pass
-    
-    # Process headings
-    for i in range(1, 7):
-        headings = driver.find_elements(By.TAG_NAME, f"h{i}")
-        for heading in headings:
-            try:
-                text = heading.text.strip()
-                if text:
-                    result.append(f"{'#' * i} {text}\n")
-            except:
-                continue
-    
-    # Process paragraphs
-    paragraphs = driver.find_elements(By.TAG_NAME, "p")
-    for p in paragraphs:
-        try:
-            text = p.text.strip()
-            if text:
-                result.append(f"{text}\n\n")
-        except:
-            continue
-    
-    # Process links
-    links = driver.find_elements(By.TAG_NAME, "a")
-    if links:
-        result.append("\n### Links:\n")
-        for link in links:
-            try:
-                href = link.get_attribute("href")
-                text = link.text.strip()
-                if href and text:
-                    result.append(f"- [{text}]({href})\n")
-            except:
-                continue
-    
-    content = "".join(result)
-    
-    # Clean up the content
-    content = re.sub(r'\n{3,}', '\n\n', content)
-    return content
-
-def _fallback_website_content(url: str) -> str:
-    """
-    Fallback method to fetch website content using an external service.
-    Used when the main method fails.
+    Legacy function that calls the new fetch_webpage function and returns just the content.
     
     Args:
       url: The URL of the webpage.
+      timeout: Request timeout in seconds.
+      extract_mode: Content extraction mode ('text' or 'markdown').
+                   'text' extracts plain text, 'markdown' preserves some formatting.
+      extract_links: Whether to extract and include links from the page.
 
-    Returns: The text content of the website as text, or an error message.
+    Returns: The text content of the website in the requested format, or an error message.
     """
-    tool_report_print("Info:", "Using fallback method to retrieve content", is_error=False)
+    # Call the new function
+    result = fetch_webpage(
+        url=url,
+        timeout=timeout,
+        extract_mode=extract_mode,
+        extract_links=extract_links,
+        use_cache=True
+    )
     
-    try:
-        base = "https://md.dhr.wtf/?url="
-        response = requests.get(base+url, headers={'User-Agent': DEFAULT_USER_AGENT})
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        soup = BeautifulSoup(response.content, 'lxml')
-        text_content = soup.get_text(separator='\n', strip=True) 
-        tool_report_print("Status:", "Webpage content fetched successfully with fallback method")
-        return text_content
-    except requests.exceptions.RequestException as e:
-        tool_report_print("Error in fallback method:", str(e), is_error=True)
-        return f"Error fetching webpage content (all methods failed): {e}"
-    except Exception as e:
-        tool_report_print("Error in fallback method:", str(e), is_error=True)
-        return f"Error processing webpage content (all methods failed): {e}"
+    # Process the result to match the old function's output
+    if result['success']:
+        content = result['content']
+        
+        # Add title if available
+        if result['title'] and extract_mode != 'text':
+            content = f"# {result['title']}\n\n{content}"
+            
+        # Add extracted links if requested
+        if extract_links and result['links']:
+            content += "\n\n## Website Navigation\n\n"
+            
+            if result['links']['navigation']:
+                content += "\n### Navigation Links\n"
+                for link in result['links']['navigation'][:15]:
+                    content += f"- [{link['text']}]({link['url']})\n"
+            
+            if result['links']['content']:
+                content += "\n### Content Links\n"
+                for link in result['links']['content'][:20]:
+                    content += f"- [{link['text']}]({link['url']})\n"
+            
+            if result['links']['external']:
+                content += "\n### External Links\n"
+                for link in result['links']['external'][:10]:
+                    content += f"- [{link['text']}]({link['url']})\n"
+        
+        return content
+    else:
+        return f"Error fetching webpage content: {result['error']}"
 
 def get_youtube_transcript(
     url_or_id: str,

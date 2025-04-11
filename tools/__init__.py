@@ -49,8 +49,8 @@ from .python_tools import (
 # Import thinking tools
 from .thinking import think
 
-# Import note-taking tools
-from .notes import add_note, update_note, get_notes, clear_notes, reset_notes
+# Import planning tools
+from .plan import create_plan, update_plan, add_plan_step, get_plans, clear_plans, reset_plans
 
 # Import Reddit tools
 from .reddit import search_reddit_posts, get_reddit_post, get_subreddit_posts
@@ -101,11 +101,12 @@ TOOLS = [
     # Thinking tools
     think,
     
-    # Note-taking tools - use the actual functions instead of dictionaries
-    add_note,
-    update_note,
-    get_notes,
-    clear_notes
+    # Plan tools - checklist functionality
+    create_plan,
+    update_plan,
+    add_plan_step,
+    get_plans,
+    clear_plans
 ]
 
 # Now import and patch the find_tools function to use our TOOLS list
@@ -113,7 +114,8 @@ from .utils import find_tools as _find_tools_orig
 
 # Create a new version of find_tools with the TOOLS list pre-injected
 def find_tools(query: str) -> list[str]:
-    return _find_tools_orig(query, TOOLS)
+    """Find tools that match the provided query."""
+    return _find_tools_orig(TOOLS, query)
 
 # Add find_tools to TOOLS list after it's been created
 TOOLS.append(find_tools)

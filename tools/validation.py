@@ -52,10 +52,12 @@ KNOWN_TOOLS = {
     "inspect_python_script": {"required": ["filepath"], "optional": []},
     "get_python_function_source_code": {"required": ["filepath", "function_name"], "optional": []},
     "think": {"required": ["thought"], "optional": []},
-    "add_note": {"required": ["content"], "optional": ["topic", "section", "append"]},
-    "update_note": {"required": ["note_id", "new_content"], "optional": ["section", "operation"]},
-    "get_notes": {"required": [], "optional": ["topic", "format"]},
-    "clear_notes": {"required": [], "optional": []},
+    # Plan tools
+    "create_plan": {"required": ["title", "steps"], "optional": ["session_wide"]},
+    "update_plan": {"required": ["plan_id", "step_index"], "optional": ["action", "new_description", "context", "completed", "session_wide"]},
+    "add_plan_step": {"required": ["plan_id", "description"], "optional": ["position", "session_wide"]},
+    "get_plans": {"required": [], "optional": ["title", "format", "session_wide"]},
+    "clear_plans": {"required": [], "optional": ["session_wide"]},
 }
 
 def validate_tool_call(tool_name: str, arguments: Dict) -> Tuple[bool, Optional[str]]:

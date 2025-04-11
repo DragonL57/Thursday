@@ -164,16 +164,58 @@ def chat_stream():
                         # Get the most recent tool call
                         tool_call = user_assistant.current_tool_calls[-1]
                         tool_id = tool_call["id"]
+                        tool_name = tool_call["name"]
                         
                         # Track if this result is empty
                         result_str = str(value)
                         is_empty_result = not result_str or result_str.strip() == '""'
                         
-                        # Update the tool call result
-                        if is_empty_result:
-                            tool_call["result"] = "No meaningful content could be extracted from this website."
+                        # Special handling for plan tools to show the actual plan content
+                        if tool_name in ["create_plan", "update_plan", "add_plan_step", "get_plans"]:
+                            # If we're calling a plan tool, extract the formatted plan content from the result
+                            lines = result_str.strip().split('\n')
+                            plan_content = ""
+                            
+                            # Find where the plan content begins (after the confirmation message)
+                            for i, line in enumerate(lines):
+                                if line.startswith("Plan #") or line.startswith("Step ") or line.startswith("New step ") or line.startswith("Plans:"):
+                                    # Include the original success message
+                                    plan_content = lines[i]
+                                    
+                                    # If this is a result from get_plans, we have a formatted plan to include
+                                    if i+1 < len(lines) and tool_name == "get_plans":
+                                        # Include the full formatted plan content
+                                        plan_content = "\n".join(lines[i:])
+                                        break
+                                    # For create_plan/update_plan, we need to access the actual plan data
+                                    # This depends on how the plan content is returned from the plan tool functions
+                                    elif tool_name == "create_plan" or tool_name == "update_plan" or tool_name == "add_plan_step":
+                                        # Extract the plan ID from the result message
+                                        import re
+                                        plan_id_match = re.search(r"Plan #(\d+)", lines[i])
+                                        if plan_id_match:
+                                            plan_id = int(plan_id_match.group(1))
+                                            # Get the actual plan content
+                                            from tools.plan import _message_plans, _session_plans
+                                            plan_idx = plan_id - 1
+                                            if 0 <= plan_idx < len(_message_plans):
+                                                plan = _message_plans[plan_idx]
+                                                plan_content += f"\n\nPlan: {plan['title']}\n"
+                                                for j, step in enumerate(plan['steps']):
+                                                    status = "[x]" if step["completed"] else "[ ]"
+                                                    plan_content += f"{status} {j+1}. {step['description']}\n"
+                                                    if step["context"]:
+                                                        plan_content += f"   Context: {step['context'][:100]}...\n" if len(step["context"]) > 100 else f"   Context: {step['context']}\n"
+                                    break
+                            
+                            # Update the tool call result with the formatted plan
+                            tool_call["result"] = plan_content if plan_content else result_str
                         else:
-                            tool_call["result"] = result_str
+                            # Standard handling for non-plan tools
+                            if is_empty_result:
+                                tool_call["result"] = "No meaningful content could be extracted from this website."
+                            else:
+                                tool_call["result"] = result_str
                             
                         tool_call["status"] = "completed" if "Error" not in str(value) else "error"
                         
@@ -214,6 +256,9 @@ def chat_stream():
             try:
                 print(f"Processing message: '{user_message}' using provider: {user_assistant.provider}")
 
+                # Import traceback here to ensure it's available in all nested scopes
+                import traceback as tb
+
                 if user_assistant.provider == 'litellm' and user_assistant.model.startswith('github/'):
                     if not os.environ.get('GITHUB_API_KEY') and hasattr(conf, 'GITHUB_API_KEY') and conf.GITHUB_API_KEY:
                         os.environ['GITHUB_API_KEY'] = conf.GITHUB_API_KEY
@@ -228,6 +273,9 @@ def chat_stream():
                             tools=user_assistant.tools
                         )
                     elif user_assistant.provider == 'litellm':
+                        # Initialize response variable here to prevent UnboundLocalError
+                        response = None
+                        
                         while empty_retries < max_empty_retries:
                             if empty_retries > 0:
                                 retry_msg = f"No response received, retrying... (attempt {empty_retries + 1}/{max_empty_retries})"
@@ -293,24 +341,20 @@ def chat_stream():
                                 final_chunk = chunk
 
                             if content_received:
-                                # We got content, process it and break the retry loop
                                 break
                             elif not chunk_received:
-                                # No chunks received at all
                                 print("\033[31mNo response chunks received from API\033[0m")  # Red text
                                 empty_retries += 1
                                 if empty_retries >= max_empty_retries:
                                     raise Exception("Failed to get any response after multiple retries")
                                 continue
                             else:
-                                # Got chunks but no content
                                 print(f"\033[33mGot chunks but no content\033[0m")  # Yellow text
                                 empty_retries += 1
                                 if empty_retries >= max_empty_retries:
                                     raise Exception("Received empty responses after multiple retries")
                                 continue
 
-                        # Construct response for tool call processing
                         response = {
                             "choices": [{
                                 "message": {
@@ -323,55 +367,65 @@ def chat_stream():
                             "model": user_assistant.model
                         }
 
-                        # Send final event if we have content
                         if accumulated_content:
                             yield f"data: {json.dumps({'event': 'final', 'data': accumulated_content})}\n\n"
                     else:
                         raise ValueError(f"Unsupported provider: {user_assistant.provider}")
 
-                    # Rest of the existing code for processing tool calls...
-                    # Existing error handling and fallback logic...
-
                 except Exception as e:
                     error_msg = str(e)
-                    # Existing error handling code...
+                    print(f"Error during streaming: {error_msg}")
+                    tb.print_exc()  # Use the locally imported traceback
+                    response = {
+                        "choices": [{
+                            "message": {
+                                "role": "assistant",
+                                "content": f"I apologize, but I encountered an error while processing your request: {error_msg}"
+                            },
+                            "finish_reason": "error"
+                        }],
+                        "model": user_assistant.model
+                    }
+                    yield f"data: {json.dumps({'event': 'error', 'data': error_msg})}\n\n"
 
-                # Process the response with tool handler
-                tool_events_generator = process_tool_calls(
-                    user_assistant,
-                    response,
-                    print_response=False,
-                    validation_retries=2,
-                    recursion_depth=0,
-                    tool_event_callback=tool_event_handler
-                )
-                
-                final_text = None
-                for event_data in tool_events_generator:
-                    if isinstance(event_data, dict) and "final_text" in event_data:
-                        final_text = event_data["final_text"]
-                    else:
-                        yield event_data
-                
-                formatting.tool_report_print = original_print
-                
-                if final_text and user_assistant.provider != 'litellm' and not user_assistant._streamed_final_response:
-                    user_assistant._final_response = final_text
-                    if not any(msg.get("role") == "assistant" and msg.get("content") == final_text for msg in user_assistant.messages[-3:]):
-                        user_assistant.messages.append({
-                            "role": "assistant",
-                            "content": final_text
-                        })
+                if response:  # Only process if response is properly set
+                    tool_events_generator = process_tool_calls(
+                        user_assistant,
+                        response,
+                        print_response=False,
+                        validation_retries=2,
+                        recursion_depth=0,
+                        tool_event_callback=tool_event_handler
+                    )
                     
-                    for token in chunk_text(final_text, 3):
-                        yield f"data: {json.dumps({'event': 'token', 'data': token})}\n\n"
+                    final_text = None
+                    for event_data in tool_events_generator:
+                        if isinstance(event_data, dict) and "final_text" in event_data:
+                            final_text = event_data["final_text"]
+                        else:
+                            yield event_data
                     
-                    yield f"data: {json.dumps({'event': 'final', 'data': final_text})}\n\n"
+                    formatting.tool_report_print = original_print
+                    
+                    if final_text and user_assistant.provider != 'litellm' and not user_assistant._streamed_final_response:
+                        user_assistant._final_response = final_text
+                        if not any(msg.get("role") == "assistant" and msg.get("content") == final_text for msg in user_assistant.messages[-3:]):
+                            user_assistant.messages.append({
+                                "role": "assistant",
+                                "content": final_text
+                            })
+                        
+                        for token in chunk_text(final_text, 3):
+                            yield f"data: {json.dumps({'event': 'token', 'data': token})}\n\n"
+                        
+                        yield f"data: {json.dumps({'event': 'final', 'data': final_text})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'event': 'error', 'data': 'Failed to get a valid response from the model.'})}\n\n"
             
             except Exception as e:
-                import traceback
+                import traceback as tb
                 print(f"Error during streaming: {e}")
-                traceback.print_exc()
+                tb.print_exc()  # Use the locally imported traceback
                 yield f"data: {json.dumps({'event': 'error', 'data': str(e)})}\n\n"
                 formatting.tool_report_print = original_print
             
