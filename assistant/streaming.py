@@ -494,6 +494,9 @@ class StreamHandler:
                 'stream': True  # Always stream for consistency
             }
             
+            # Always enable tool_choice for tool use regardless of whether message has images
+            completion_args["tool_choice"] = "auto"
+            
             # Add safety settings if available
             safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
             if safety_settings:
@@ -565,7 +568,7 @@ class StreamHandler:
                     
                     # Process tool calls if present
                     try:
-                        if choice.delta.tool_calls:
+                        if hasattr(choice.delta, 'tool_calls') and choice.delta.tool_calls:
                             content_received = True  # Tool calls also count as content
                             for tool_call_delta in choice.delta.tool_calls:
                                 # Process tool call data
@@ -583,10 +586,11 @@ class StreamHandler:
                                     })
                                 else:
                                     # Append to existing tool call
-                                    if tool_call_delta.function and tool_call_delta.function.name:
-                                        accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
-                                    if tool_call_delta.function and tool_call_delta.function.arguments:
-                                        accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
+                                    if hasattr(tool_call_delta, 'function'):
+                                        if hasattr(tool_call_delta.function, 'name') and tool_call_delta.function.name:
+                                            accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
+                                        if hasattr(tool_call_delta.function, 'arguments') and tool_call_delta.function.arguments:
+                                            accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
                                         
                                 # Check if we have a complete tool call that we can yield
                                 if (accumulated_tool_calls[index]["function"]["name"] and
@@ -617,7 +621,8 @@ class StreamHandler:
                                     except json.JSONDecodeError:
                                         # Arguments not complete yet, keep accumulating
                                         pass
-                    except (AttributeError, KeyError):
+                    except (AttributeError, KeyError) as e:
+                        print(f"Warning: Error processing tool call: {e}")
                         pass
                 
                 # Check if we received any content
@@ -665,7 +670,7 @@ class StreamHandler:
                     callback({"event": "final", "data": accumulated_content})
             
             # Process tool calls if they weren't already processed during streaming
-            if accumulated_tool_calls and not assistant.current_tool_calls:
+            if accumulated_tool_calls:
                 # Add the tool calls to the message
                 message_with_tool_calls = {
                     "role": "assistant",
@@ -688,6 +693,11 @@ class StreamHandler:
                 
                 # Add tool calls to current_tool_calls for processing
                 for tool_call in accumulated_tool_calls:
+                    # Skip already processed tool calls
+                    tool_id = tool_call["id"]
+                    if any(tc["id"] == tool_id for tc in assistant.current_tool_calls):
+                        continue
+                        
                     assistant.current_tool_calls.append({
                         "id": tool_call["id"],
                         "name": tool_call["function"]["name"],
@@ -695,6 +705,10 @@ class StreamHandler:
                         "status": "pending",
                         "result": None
                     })
+                    
+                # If we only received tool calls but no content, make sure UI knows we're processing tools
+                if not accumulated_content and callback:
+                    yield {"event": "info", "data": "Processing image using tools...", "temporary": True}
                     
         except Exception as e:
             print(f"{Fore.RED}LiteLLM completion error: {str(e)}{Style.RESET_ALL}")

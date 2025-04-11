@@ -112,7 +112,7 @@ def read_website_content(
     url: str, 
     timeout: int = 5, 
     extract_mode: str = "text",
-    extract_links: bool = True  # Changed default to True so links are always extracted
+    extract_links: bool = False  # Changed default to True so links are always extracted
 ) -> str:
     """
     Fetch and return the text content of a webpage/article.

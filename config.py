@@ -90,7 +90,7 @@ RESPONSE_STYLE = """
       - Insert visual breaks between major sections when responses are long
       - Suggest related topics the user might want to explore next
       - Maintain proper formatting for any specialized content (code, math, etc.)
-      - **Always format URLs as clickable Markdown links** using [Title](URL) syntax whenever referencing a webpage
+      - **Always format URLs as clickable Markdown links** using [Number](URL) syntax whenever referencing a webpage
       - For references without URLs, use descriptive text that clearly identifies the source
     </principles>
   </formatting>

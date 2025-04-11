@@ -6,10 +6,12 @@ import json
 import inspect
 import time
 import random
+import litellm  # Add the missing litellm import
 from colorama import Fore, Style
 from pydantic import BaseModel
 from tools import validate_tool_call, tool_report_print
 from assistant.api_client import preprocess_messages_for_litellm
+import config as conf  # Add missing import for config
 
 def process_tool_calls(assistant, response_json, print_response=True, validation_retries=2, recursion_depth=0, tool_event_callback=None):
     """
@@ -101,6 +103,22 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
     # Process each tool call
     has_errors = False
     processed_tool_ids = set()  # Track which tool calls we've processed
+    
+    # Check if the message had images - especially relevant for multimodal context
+    has_image_content = False
+    for msg in assistant.messages[-2:]:  # Check last few messages
+        if isinstance(msg.get("content"), list):
+            for content_item in msg.get("content", []):
+                if isinstance(content_item, dict) and content_item.get("type") == "image_url":
+                    has_image_content = True
+                    break
+    
+    if has_image_content:
+        print(f"{Fore.CYAN}Processing tool calls for message with image content{Style.RESET_ALL}")
+        # If there's an info callback, use it to notify the user
+        if tool_event_callback:
+            for chunk in tool_event_callback("info", "Analyzing image with tools...", True):
+                yield chunk
     
     for tool_call in tool_calls:
         function_name = tool_call["function"]["name"]
@@ -275,10 +293,6 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         # Just log to console instead
         print("Getting next response after tool execution...")
         
-        # Use litellm for completion with streaming for tool processing
-        import litellm
-        import config as conf
-        
         # Debug log the messages to understand the current conversation state
         print(f"Messages before follow-up call (count: {len(assistant.messages)}):")
         for i, msg in enumerate(assistant.messages[-3:] if len(assistant.messages) > 3 else assistant.messages):
@@ -322,8 +336,13 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         
         # Inform the user we're processing the tool results
         if tool_event_callback and recursion_depth == 0:
-            for chunk in tool_event_callback("info", "Processing results and generating response...", False):
-                yield chunk
+            # Use special message for image-based inputs
+            if has_image_content:
+                for chunk in tool_event_callback("info", "Analyzing image and generating response...", False):
+                    yield chunk
+            else:
+                for chunk in tool_event_callback("info", "Processing results and generating response...", False):
+                    yield chunk
         
         # Initialize retry variables
         retry_count = 0
