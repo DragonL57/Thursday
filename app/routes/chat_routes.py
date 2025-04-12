@@ -80,10 +80,6 @@ def chat_stream():
             # Send start event
             yield f"data: {json.dumps({'event': 'start'})}\n\n"
             
-            # Reset notes for the new message
-            from tools.notes import reset_notes
-            reset_notes()
-            
             # If this is a retry, remove the last user message and all subsequent assistant/tool messages
             if is_retry and len(user_assistant.messages) > 0:
                 print("Retry detected: Removing last user turn and subsequent messages from history.")
