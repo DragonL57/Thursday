@@ -134,8 +134,8 @@ def type_hint_to_json_schema(type_hint) -> Dict[str, Any]:
     
     # Handle Dict and dict-like types
     elif origin is dict:
-        # For Gemini compatibility, specify a simple object schema
-        return {"type": "object", "additionalProperties": {"type": "string"}}
+        # For Gemini compatibility, specify a simple object schema without additionalProperties
+        return {"type": "object"}
     
     # Handle Union types (including Optional)
     elif origin is Union or origin is UnionType:
@@ -211,7 +211,7 @@ def type_hint_to_json_schema(type_hint) -> Dict[str, Any]:
             return schema
         except Exception as e:
             warnings.warn(f"Error processing Pydantic model schema: {str(e)}. Using simple object schema.", UserWarning)
-            return {"type": "object", "additionalProperties": {"type": "string"}}
+            return {"type": "object"}
     
     # Fallback for unsupported types, with better handling
     try:
