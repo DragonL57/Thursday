@@ -21,7 +21,12 @@ from .web import (
 # Import all system functions
 from .system import (
     run_shell_command,
-    get_current_datetime
+    get_current_datetime,
+    get_command_output,
+    kill_background_process,
+    list_background_processes,
+    get_command_history,
+    get_system_info
 )
 
 # Import all Python tools
@@ -104,6 +109,11 @@ TOOLS = [
     # System tools
     run_shell_command,
     get_current_datetime,
+    get_command_output,
+    kill_background_process,
+    list_background_processes,
+    get_command_history,
+    get_system_info,
     
     # Python tools
     inspect_python_script,
