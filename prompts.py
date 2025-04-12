@@ -162,6 +162,102 @@ def get_core_system_prompt():
                 </guidelines>
             </website_navigation>
         </tool_use_strategy>
+
+        <file_system_tools>
+            <capabilities>
+                <heading>### File System Operations</heading>
+                - Reading from and writing to files in various formats
+                - Searching for files based on names, patterns, or content
+                - Creating and organizing directory structures
+                - Compressing and archiving files (zip, tar)
+                - Analyzing file contents and extracting relevant information
+                - Converting between different file formats
+            </capabilities>
+            
+            <usage_guide>
+                <file_reading_writing>
+                    - Use `read_text(filepath)` to read the contents of text files
+                    - Use `write_text(filepath, content)` to create or update text files
+                    - Use `read_structured_file(filepath)` for automatic parsing of JSON, YAML, CSV
+                    - Use `write_structured_file(filepath, data, format_type)` to save structured data
+                </file_reading_writing>
+                
+                <file_searching>
+                    - Use `find_files(criteria)` when looking for files by name, pattern, or content
+                      - Examples: Finding all Python files, locating files with specific text
+                    - Use `grep_in_files(pattern, file_pattern)` to search for patterns inside files
+                      - Example: Finding all occurrences of a function name in code files
+                </file_searching>
+                
+                <directory_management>
+                    - Use `list_directory(path)` to see what files and folders exist in a location
+                    - Use `get_current_directory()` to determine your current working directory
+                    - Use `create_directory(paths)` to create new folders
+                    - Use `get_directory_size(path)` to calculate space usage
+                </directory_management>
+                
+                <file_organization>
+                    - Use `copy(operations)` to copy files or entire directories
+                    - Use `move(operations)` to move or rename files and folders
+                    - Use `delete(paths, recursive=False)` to remove files or empty directories
+                </file_organization>
+                
+                <archive_operations>
+                    - Use `create_zip(zip_file, files)` to compress multiple files into a ZIP
+                    - Use `extract_archive(archive_path)` to unpack ZIP/TAR archives
+                    - Use `list_archive_contents(archive_path)` to see inside archives without extracting
+                </archive_operations>
+                
+                <file_conversion>
+                    - Use `convert_to_json(input_path)` to convert CSV/YAML files to JSON
+                    - Use `convert_from_json(input_path, output_format)` to convert JSON to other formats
+                </file_conversion>
+                
+                <file_analysis>
+                    - Use `get_file_metadata(filepath)` to inspect file properties
+                    - Use `read_binary(filepath)` to get information about binary files
+                    - Use `read_lines(filepath, start_line, end_line)` to read specific portions of files
+                </file_analysis>
+            </usage_guide>
+            
+            <when_to_use>
+                <reading_examining>
+                    - When the user asks about the content of a specific file
+                    - When you need to analyze code, configuration files, or data files
+                    - When comparing contents of different files
+                </reading_examining>
+                
+                <navigation>
+                    - When the user asks what files or directories exist
+                    - When determining the structure of a project or codebase
+                    - When finding specific files among many directories
+                </navigation>
+                
+                <creation_modification>
+                    - When the user wants to create new files or projects
+                    - When setting up configuration files or templates
+                    - When modifying existing file content
+                </creation_modification>
+                
+                <organization>
+                    - When the user needs to organize files into folders
+                    - When backing up or archiving existing files
+                    - When cleaning up or restructuring directories
+                </organization>
+                
+                <content_search>
+                    - When looking for specific patterns across multiple files
+                    - When searching for files with particular properties or content
+                    - When analyzing code bases for certain functions or features
+                </content_search>
+                
+                <conversion>
+                    - When converting data between JSON, CSV, YAML formats
+                    - When preparing data files for different applications
+                    - When extracting data from one format for use in another
+                </conversion>
+            </when_to_use>
+        </file_system_tools>
     
         <thinking_process>
             <mandatory_usage>
@@ -345,7 +441,7 @@ def get_core_system_prompt():
                 6. If initial research is insufficient, try alternative queries or approaches
                 7. Use `think` again to process the information and identify gaps
                 8. Continue research until you have exhaustive information on the topic
-                9. Retrieve your notes with `get_notes` to prepare your response
+                9. Retrieve your plan with `get_plans` to prepare your response
                 10. Present a comprehensive, detailed response with thorough explanation
             </steps>
         </complex_question_process>

@@ -8,24 +8,8 @@ The tools are organized into modules based on their functionality.
 # Import all formatting functions
 from .formatting import tool_message_print, tool_report_print
 
-# Import all filesystem functions
-from .filesystem import (
-    get_current_directory,
-    list_dir,
-    get_drives,
-    get_directory_size,
-    get_multiple_directory_size,
-    read_file,
-    create_directory,
-    get_file_metadata,
-    write_files,
-    copy_file,
-    move_file,
-    rename_file,
-    rename_directory,
-    find_files,
-    read_file_at_specific_line_range
-)
+# Import the new consolidated filesystem interface
+from .filesys import FileSys
 
 # Import all web functions
 from .web import (
@@ -61,6 +45,15 @@ from .validation import (
     KNOWN_TOOLS
 )
 
+# Define filesystem tools from the consolidated FileSys class
+file_system_navigator = FileSys.navigator
+file_reader = FileSys.reader
+file_writer = FileSys.writer
+file_manager = FileSys.manager
+file_searcher = FileSys.searcher
+file_archiver = FileSys.archiver
+file_converter = FileSys.converter
+
 # Define tools available to the AI
 TOOLS = [
     # Web tools
@@ -73,22 +66,40 @@ TOOLS = [
     get_reddit_post,
     get_subreddit_posts,
     
-    # Filesystem tools
-    get_current_directory,
-    list_dir,
-    get_drives,
-    get_directory_size,
-    get_multiple_directory_size,
-    read_file,
-    create_directory,
-    get_file_metadata,
-    write_files,
-    copy_file,
-    move_file,
-    rename_file,
-    rename_directory,
-    find_files,
-    read_file_at_specific_line_range,
+    # Filesystem tools - organized by category
+    # Navigation and info
+    file_system_navigator.get_current_directory,
+    file_system_navigator.list_directory,
+    file_system_navigator.get_file_metadata,
+    file_system_navigator.get_directory_size,
+    
+    # File content operations
+    file_reader.read_text,
+    file_reader.read_binary,
+    file_reader.read_lines,
+    file_reader.read_structured_file,
+    file_writer.write_text,
+    file_writer.write_multiple,
+    file_writer.write_structured_file,
+    
+    # File management
+    file_manager.copy,
+    file_manager.move,
+    file_manager.create_directory,
+    file_manager.delete,
+    
+    # Search
+    file_searcher.find_files,
+    file_searcher.grep_in_files,
+    
+    # Archive operations
+    file_archiver.create_zip,
+    file_archiver.extract_archive,
+    file_archiver.list_archive_contents,
+    
+    # File conversion
+    file_converter.convert_to_json,
+    file_converter.convert_from_json,
     
     # System tools
     run_shell_command,

@@ -6,11 +6,22 @@ from typing import Dict, Optional, Tuple
 
 # Define known tools and their required/optional parameters
 KNOWN_TOOLS = {
+    # Web tools
     "web_search": {
         "required": ["query"], 
         "optional": ["max_results", "region", "time_filter", "safe_search"]
     },
-    "list_dir": {"required": ["path", "recursive", "files_only", "dirs_only"], "optional": []},
+    "read_website_content": {
+        "required": ["url"], 
+        "optional": ["timeout", "extract_mode"]
+    },
+    "get_youtube_transcript": {
+        "required": ["url_or_id"],
+        "optional": ["languages", "combine_all"]
+    },
+    
+    # Original filesystem tools (kept for backward compatibility)
+    "list_dir": {"required": ["path"], "optional": ["recursive", "files_only", "dirs_only"]},
     "get_drives": {"required": [], "optional": []},
     "get_directory_size": {"required": ["path"], "optional": []},
     "get_multiple_directory_size": {"required": ["paths"], "optional": []},
@@ -24,14 +35,41 @@ KNOWN_TOOLS = {
     "rename_file": {"required": ["filepath", "new_filename"], "optional": []},
     "rename_directory": {"required": ["path", "new_dirname"], "optional": []},
     "find_files": {"required": ["pattern"], "optional": ["directory", "recursive", "include_hidden"]},
-    "read_website_content": {
-        "required": ["url"], 
-        "optional": ["timeout", "extract_mode"]
-    },
-    "get_youtube_transcript": {
-        "required": ["url_or_id"],
-        "optional": ["languages", "combine_all"]
-    },
+    
+    # New consolidated filesystem tools
+    "get_current_directory": {"required": [], "optional": []},
+    "list_directory": {"required": ["path"], "optional": ["recursive", "files_only", "dirs_only"]},
+    "get_file_metadata": {"required": ["filepath"], "optional": []},
+    "get_directory_size": {"required": ["path"], "optional": []},
+    
+    # File content operations
+    "read_text": {"required": ["filepath"], "optional": ["encoding"]},
+    "read_binary": {"required": ["filepath"], "optional": []},
+    "read_lines": {"required": ["filepath"], "optional": ["start_line", "end_line", "encoding"]},
+    "read_structured_file": {"required": ["filepath"], "optional": []},
+    "write_text": {"required": ["filepath", "content"], "optional": ["encoding"]},
+    "write_multiple": {"required": ["files_data"], "optional": []},
+    "write_structured_file": {"required": ["filepath", "data", "format_type"], "optional": []},
+    
+    # File management
+    "copy": {"required": ["operations"], "optional": []},
+    "move": {"required": ["operations"], "optional": []},
+    "create_directory": {"required": ["paths"], "optional": []},
+    "delete": {"required": ["paths"], "optional": ["recursive"]},
+    
+    # Search
+    "find_files": {"required": ["criteria"], "optional": []},
+    "grep_in_files": {"required": ["pattern"], "optional": ["file_pattern", "directory", "recursive", "case_sensitive", "use_regex"]},
+    
+    # Archive operations
+    "create_zip": {"required": ["zip_file", "files"], "optional": ["compress_level"]},
+    "extract_archive": {"required": ["archive_path"], "optional": ["extract_path", "specific_files"]},
+    "list_archive_contents": {"required": ["archive_path"], "optional": []},
+    
+    # File conversion
+    "convert_to_json": {"required": ["input_path"], "optional": ["output_path"]},
+    "convert_from_json": {"required": ["input_path", "output_format"], "optional": ["output_path"]},
+    
     # Reddit tools
     "search_reddit_posts": {
         "required": ["query"],
@@ -45,13 +83,19 @@ KNOWN_TOOLS = {
         "required": ["subreddit"],
         "optional": ["sort", "time_filter", "limit"]
     },
+    
+    # System tools
     "run_shell_command": {"required": ["command", "blocking"], "optional": ["print_output"]},
     "get_current_datetime": {"required": [], "optional": []},
-    "get_current_directory": {"required": [], "optional": []},
-    "find_tools": {"required": ["query"], "optional": []},
+    
+    # Python tools
     "inspect_python_script": {"required": ["filepath"], "optional": []},
     "get_python_function_source_code": {"required": ["filepath", "function_name"], "optional": []},
+    
+    # Utility tools
+    "find_tools": {"required": ["query"], "optional": []},
     "think": {"required": ["thought"], "optional": []},
+    
     # Plan tools
     "create_plan": {"required": ["title", "steps"], "optional": ["session_wide"]},
     "update_plan": {"required": ["plan_id", "step_index"], "optional": ["action", "new_description", "context", "completed", "session_wide"]},

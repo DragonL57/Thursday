@@ -30,7 +30,8 @@ dependencies = [
     "sshuttle",
     "selenium>=4.10.0",
     "webdriver-manager>=4.0.0",
-    "scrapy"
+    "scrapy",
+    "chardet"
 ]
 
 [dependency-groups]
