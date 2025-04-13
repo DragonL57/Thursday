@@ -275,8 +275,8 @@ def chat_stream():
                         while empty_retries < max_empty_retries:
                             if empty_retries > 0:
                                 retry_msg = f"No response received, retrying... (attempt {empty_retries + 1}/{max_empty_retries})"
-                                print(f"\033[33m{retry_msg}\033[0m")  # Yellow text
-                                yield f"data: {json.dumps({'event': 'info', 'data': retry_msg, 'temp': True})}\n\n"
+                                print(f"\033[33m{retry_msg}\033[0m")  # Yellow text in console only
+                                # Don't send retry messages to the UI, just log them to the server console
                                 time.sleep(retry_delay)  # Wait before retry
                             
                             completion_args = {
@@ -307,32 +307,44 @@ def chat_stream():
                                 if time.time() - start_time > max_no_content_time and not content_received:
                                     raise Exception("Timeout waiting for initial content from API")
                                 
-                                chunk_content = chunk.choices[0].delta.content
-                                chunk_tool_calls = chunk.choices[0].delta.tool_calls
+                                # Log the full chunk details for debugging
+                                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
+                                    # Examine the chunk to see if there's any content
+                                    chunk_content = chunk.choices[0].delta.content
+                                    chunk_tool_calls = chunk.choices[0].delta.tool_calls
+                                    finish_reason = chunk.choices[0].finish_reason
 
-                                if chunk_content:
-                                    content_received = True
-                                    accumulated_content += chunk_content
-                                    yield f"data: {json.dumps({'event': 'token', 'data': chunk_content})}\n\n"
+                                    # Check for stop signal with empty content (common with multilingual queries)
+                                    if finish_reason in ["stop", "function_call"] and not content_received:
+                                        # Consider this a valid empty response - don't retry
+                                        print(f"\033[33mReceived finish signal '{finish_reason}' without content - treating as valid empty response\033[0m")
+                                        content_received = True  # Mark as valid to avoid retry
+                                        # For multilingual or special queries, sometimes the model decides to respond
+                                        # with function calls later or empty content initially - this is valid
+                                        
+                                    if chunk_content:
+                                        content_received = True
+                                        accumulated_content += chunk_content
+                                        yield f"data: {json.dumps({'event': 'token', 'data': chunk_content})}\n\n"
 
-                                if chunk_tool_calls:
-                                    content_received = True  # Tool calls also count as content
-                                    for tool_call_delta in chunk_tool_calls:
-                                        index = tool_call_delta.index
-                                        if index >= len(accumulated_tool_calls):
-                                            accumulated_tool_calls.append({
-                                                "id": tool_call_delta.id or f"tool_{index}",
-                                                "type": "function",
-                                                "function": {
-                                                    "name": tool_call_delta.function.name or "",
-                                                    "arguments": tool_call_delta.function.arguments or ""
-                                                }
-                                            })
-                                        else:
-                                            if tool_call_delta.function.name:
-                                                accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
-                                            if tool_call_delta.function.arguments:
-                                                accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
+                                    if chunk_tool_calls:
+                                        content_received = True  # Tool calls also count as content
+                                        for tool_call_delta in chunk_tool_calls:
+                                            index = tool_call_delta.index
+                                            if index >= len(accumulated_tool_calls):
+                                                accumulated_tool_calls.append({
+                                                    "id": tool_call_delta.id or f"tool_{index}",
+                                                    "type": "function",
+                                                    "function": {
+                                                        "name": tool_call_delta.function.name or "",
+                                                        "arguments": tool_call_delta.function.arguments or ""
+                                                    }
+                                                })
+                                            else:
+                                                if tool_call_delta.function.name:
+                                                    accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
+                                                if tool_call_delta.function.arguments:
+                                                    accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
 
                                 final_chunk = chunk
 
