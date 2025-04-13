@@ -7,6 +7,30 @@ import { SettingsManager } from './components/settings.js';
 import { ModelSelector } from './components/ModelSelector.js'; // Add this import
 import { PDFExporter } from './utils/pdfExport.js';
 
+// Add a session flag to track page loads
+const isNewPageLoad = !sessionStorage.getItem('hasLoadedBefore');
+if (isNewPageLoad) {
+    console.log('First page load detected, will reset conversation');
+    sessionStorage.setItem('hasLoadedBefore', 'true');
+    
+    // Reset conversation on first load (using fetch with keepalive to ensure it completes)
+    fetch('/chat/reset', {
+        method: 'POST',
+        keepalive: true, // This ensures the request completes even if page unloads
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Reset-Reason': 'page-refresh'
+        }
+    }).catch(err => {
+        console.error('Failed to reset conversation on page load', err);
+    });
+}
+
+// When the page is about to unload, clear the session flag so next load is treated as new
+window.addEventListener('beforeunload', () => {
+    sessionStorage.removeItem('hasLoadedBefore');
+});
+
 // Initialize the app when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
     // Set up markdown renderer

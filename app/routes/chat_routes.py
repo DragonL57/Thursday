@@ -478,23 +478,36 @@ def reset_chat():
     try:
         session_id = session.get('user_id', request.remote_addr)
         
-        # Check if the assistant exists for this session
-        if session_id not in current_app.assistants:
-            print(f"Creating new assistant for session {session_id}")
-            # Create a new assistant for this session with the system prompt
-            assistant = Assistant(
-                model=conf.MODEL,
-                name=conf.NAME,
-                tools=tools.TOOLS,
-                system_instruction=conf.get_system_prompt()
-            )
-            current_app.assistants[session_id] = assistant
+        # Check if this is a page refresh reset request
+        is_page_refresh = request.headers.get('X-Reset-Reason') == 'page-refresh'
+        
+        if is_page_refresh:
+            print(f"Page refresh detected - performing complete reset for session {session_id}")
+            # For page refresh, completely remove the assistant instance to force a fresh start
+            if session_id in current_app.assistants:
+                del current_app.assistants[session_id]
+            # Clear any session data related to the conversation
+            for key in list(session.keys()):
+                if key.startswith('conversation_') or key == 'current_conversation_id':
+                    session.pop(key, None)
+            print("Complete conversation reset performed due to page refresh")
         else:
-            print(f"Resetting existing assistant for session {session_id}")
-            # Reset the existing assistant
-            current_app.assistants[session_id].reset_session()
-            
-        print("Chat session reset successfully")
+            # Standard reset for explicit user request
+            if session_id not in current_app.assistants:
+                print(f"Creating new assistant for session {session_id}")
+                # Create a new assistant for this session with the system prompt
+                assistant = Assistant(
+                    model=conf.MODEL,
+                    name=conf.NAME,
+                    tools=TOOLS,
+                    system_instruction=conf.get_system_prompt()
+                )
+                current_app.assistants[session_id] = assistant
+            else:
+                print(f"Resetting existing assistant for session {session_id}")
+                # Reset the existing assistant
+                current_app.assistants[session_id].reset_session()
+        
         return jsonify({"status": "success", "message": "Chat session reset successfully"})
     except Exception as e:
         print(f"Error resetting chat session: {e}")

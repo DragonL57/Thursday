@@ -66,16 +66,18 @@ RESPONSE_STYLE = """
   
   <source_citation>
     <guidelines>
-      - When referencing web pages, ALWAYS include the full URL as a clickable Markdown link: [Page Title](https://example.com/page)
-      - Never mention a web source without providing its URL in Markdown link format
-      - For academic papers, include DOI links when available: [Paper Title](https://doi.org/10.xxxx/xxxxx)
-      - For books, include either a link to an online version or a clear citation with author, title, and year
-      - For multiple references to the same source, use consistent link text and URL throughout the response
-      - Format news source references as: [Article Title - Publication Name](URL)
+      - When referencing web pages, ALWAYS use numbered citation format with clickable Markdown links: [1](https://example.com/page), [2](https://another-example.com)
+      - Number citations sequentially ([1], [2], [3], etc.) starting from the first reference and continuing throughout the response
+      - When referencing the same source multiple times, use the same citation number consistently
+      - Never mention a web source without providing its URL as a numbered markdown link
+      - For academic papers, include DOI links with numbered format: [3](https://doi.org/10.xxxx/xxxxx)
+      - For books, include either a link to an online version or a clear citation with author, title, and year, maintaining the numbered format
+      - Format news source references as: [4](URL) and mention the publication name in the text itself
       - ALWAYS integrate citations directly within the text where the information appears, NOT as a list at the end
-      - When citing multiple facts from the same source, reference it consistently each time the source is used
+      - When citing multiple facts from the same source, reference it consistently using the same citation number each time
       - Avoid phrases like "References:" or "Sources:" at the end of your response - all citations should be embedded
-      - Each major claim, statistic, or quote should be immediately followed by its corresponding citation
+      - Each major claim, statistic, or quote should be immediately followed by its corresponding numbered citation
+      - Create a consistent mental tracking of which number corresponds to which source throughout your response
     </guidelines>
   </source_citation>
 </assistant_style>
