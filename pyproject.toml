@@ -23,6 +23,7 @@ dependencies = [
     "wmi>=1.5.1; sys_platform == 'win32'",
     "flask",
     "youtube-transcript-api>=0.6.1",
+    "requests>=2.31.0",
     "litellm",
     "google-genai",
     "PyPDF2",

@@ -19,24 +19,9 @@ from prompts import (
     INCLUDE_USER_CONTEXT
 )
 
-# --- Provider Configuration ---
-API_PROVIDER = 'litellm'  # Set default API provider to litellm
-DEFAULT_MODEL = 'gemini/gemini-2.0-flash'
-AVAILABLE_MODELS = [
-    'gemini/gemini-2.0-flash'
-]
 
 # --- Model Configuration ---
-# For LiteLLM provider, use provider/model format
-MODEL = "gemini/gemini-2.0-flash"  # Default model
-
-# --- Provider-specific Documentation ---
-# LiteLLM models (always in provider/model format):
-#   - 'gemini/gemini-2.0-flash' - Google's Gemini 2.0 Flash
-
-# --- API Keys (Loaded from .env) ---
-# LiteLLM automatically reads these from environment variables if set
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # For gemini/... models via Google AI Studio
+MODEL = "openai-large"  # Default model
 
 # --- Model Parameters ---
 TEMPERATURE = 1
@@ -70,6 +55,9 @@ WEB_REQUEST_TIMEOUT: int = 30
 
 # Timeout for DuckDuckGo searches
 DUCKDUCKGO_TIMEOUT: int = 5
+
+# Set default provider to pollinations (since it's the only one we use now)
+API_PROVIDER = 'pollinations'
 
 # Add a method to update the configuration
 def update_config(settings):

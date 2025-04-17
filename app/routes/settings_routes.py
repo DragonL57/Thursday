@@ -27,8 +27,8 @@ class SettingsAPI(MethodView):
                 'id': 'openai-large',
                 'name': 'GPT-4o',
                 'provider': 'pollinations',
-                'display_name': 'Pollinations: GPT-4o (openai-large)',
-                'api_name': 'openai-large'  # Don't modify, send as openai-large
+                'display_name': 'Pollinations: OpenAI (openai)',
+                'api_name': 'openai'  # Don't modify, send as openai
             },
             {
                 'id': 'github/gpt-4o',
@@ -49,7 +49,7 @@ class SettingsAPI(MethodView):
         # Return settings
         return jsonify({
             'provider': getattr(conf, 'API_PROVIDER', 'pollinations'),
-            'model': getattr(conf, 'MODEL', 'openai-large'),
+            'model': getattr(conf, 'MODEL', 'openai'),
             'temperature': getattr(conf, 'TEMPERATURE', 1.0),
             'max_tokens': getattr(conf, 'MAX_TOKENS', 8192),
             'save_history': getattr(conf, 'SAVE_HISTORY', True),

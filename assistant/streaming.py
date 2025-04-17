@@ -682,3 +682,315 @@ class StreamHandler:
             print(f"{Fore.RED}LiteLLM completion error: {str(e)}{Style.RESET_ALL}")
             traceback.print_exc()
             yield {"event": "error", "data": f"API error: {str(e)}"}
+
+    def _handle_pollinations_streaming(self, callback):
+        """Handle streaming with Pollinations API."""
+        from colorama import Fore, Style
+        import json
+        import traceback
+        import requests
+        
+        assistant = self.assistant
+        
+        try:
+            # Import config for temperature and other parameters
+            import config as conf
+            
+            # Initialize the stream with all necessary parameters
+            completion_args = {
+                'model': assistant.model,
+                'messages': assistant.messages,
+                'tools': assistant.tools,
+                'temperature': conf.TEMPERATURE,
+                'top_p': conf.TOP_P,
+                'max_tokens': conf.MAX_TOKENS,
+                'seed': conf.SEED,
+                'stream': True  # Always stream for consistency
+            }
+            
+            # Always enable tool_choice for tool use regardless of whether message has images
+            completion_args["tool_choice"] = "auto"
+            
+            # Add safety settings if available
+            safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
+            if safety_settings:
+                completion_args["safety_settings"] = safety_settings
+                
+            # Remove None values
+            completion_args = {k: v for k, v in completion_args.items() if v is not None}
+            
+            # Debug info
+            print(f"{Fore.CYAN}Starting Pollinations stream with model: {assistant.model}{Style.RESET_ALL}")
+            
+            # Add retry logic for empty responses
+            max_empty_retries = 3
+            retry_count = 0
+            content_received = False
+            
+            # Prepare API request
+            url = "https://text.pollinations.ai/openai"
+            headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+
+            while retry_count < max_empty_retries:
+                if retry_count > 0:
+                    # Inform the user about the retry
+                    retry_msg = f"No response received, retrying... (attempt {retry_count + 1}/{max_empty_retries})"
+                    print(f"{Fore.YELLOW}{retry_msg}{Style.RESET_ALL}")
+                    if callback:
+                        callback({"event": "info", "data": retry_msg})
+                    
+                    # Slightly increase temperature on retries to encourage different responses
+                    completion_args['temperature'] = min(1.0, (completion_args.get('temperature', 0.7) + 0.1))
+                
+                # Start the stream with Pollinations API
+                response = requests.post(
+                    url, 
+                    headers=headers, 
+                    json=completion_args,
+                    stream=True
+                )
+                response.raise_for_status()
+                
+                # Process the stream
+                accumulated_content = ""
+                accumulated_tool_calls = []
+                last_content = None
+                chunk_count = 0
+                
+                for line in response.iter_lines():
+                    chunk_count += 1
+                    # Check if streaming was aborted
+                    if self.stream_abort:
+                        print("Stream aborted by user")
+                        break
+                    
+                    if not line:
+                        continue
+                        
+                    # Skip potential preface like "data: "
+                    line = line.decode('utf-8')
+                    if not line.startswith('data: '):
+                        continue
+                        
+                    data = line[6:]  # Remove "data: " prefix
+                    
+                    # Check for end of stream marker
+                    if data == "[DONE]":
+                        break
+                    
+                    try:
+                        chunk = json.loads(data)
+                        
+                        if 'choices' not in chunk or len(chunk['choices']) == 0:
+                            continue
+                            
+                        choice = chunk['choices'][0]
+                        
+                        # Extract content if present
+                        delta_content = None
+                        try:
+                            delta_content = choice.get('delta', {}).get('content')
+                        except (AttributeError, KeyError):
+                            pass
+                        
+                        # Process content if present
+                        if delta_content:
+                            content_received = True  # Mark that we received some content
+                            # Deduplicate identical tokens that sometimes occur in streams
+                            if delta_content != last_content:
+                                accumulated_content += delta_content
+                                yield {"event": "token", "data": delta_content}
+                                
+                                # Call the callback if provided
+                                if callback:
+                                    callback({"event": "token", "data": delta_content})
+                                    
+                                last_content = delta_content
+                        
+                        # Process tool calls if present
+                        try:
+                            if 'tool_calls' in choice.get('delta', {}):
+                                content_received = True  # Tool calls also count as content
+                                for tool_call_delta in choice['delta']['tool_calls']:
+                                    # Process tool call data
+                                    index = tool_call_delta.get('index', 0)
+                                    
+                                    # Handle new tool call
+                                    if index >= len(accumulated_tool_calls):
+                                        accumulated_tool_calls.append({
+                                            "id": tool_call_delta.get('id', f"tool_{index}"),
+                                            "type": "function",
+                                            "function": {
+                                                "name": tool_call_delta.get('function', {}).get('name', ""),
+                                                "arguments": tool_call_delta.get('function', {}).get('arguments', "")
+                                            }
+                                        })
+                                    else:
+                                        # Append to existing tool call
+                                        if 'function' in tool_call_delta:
+                                            if tool_call_delta['function'].get('name'):
+                                                accumulated_tool_calls[index]["function"]["name"] += tool_call_delta['function']['name']
+                                            if tool_call_delta['function'].get('arguments'):
+                                                accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta['function']['arguments']
+                                        
+                                    # Check if we have a complete tool call that we can yield
+                                    if (accumulated_tool_calls[index]["function"]["name"] and
+                                        accumulated_tool_calls[index]["function"]["arguments"] and
+                                        accumulated_tool_calls[index]["function"]["arguments"].strip().endswith('}')):
+                                        try:
+                                            # Parse the arguments as JSON to validate completeness
+                                            args_str = accumulated_tool_calls[index]["function"]["arguments"]
+                                            if args_str.strip():
+                                                json.loads(args_str)
+                                                
+                                            # Create tool call data format compatible with UI expectations
+                                            tool_data = {
+                                                "id": accumulated_tool_calls[index]["id"],
+                                                "name": accumulated_tool_calls[index]["function"]["name"],
+                                                "args": accumulated_tool_calls[index]["function"]["arguments"],
+                                                "status": "pending",
+                                                "result": None
+                                            }
+                                            
+                                            # Yield the tool call event
+                                            yield {"event": "tool_call", "data": tool_data}
+                                            
+                                            # Call the callback if provided
+                                            if callback:
+                                                callback({"event": "tool_call", "data": tool_data})
+                                        except json.JSONDecodeError:
+                                            # Arguments not complete yet, keep accumulating
+                                            pass
+                        except (AttributeError, KeyError) as e:
+                            print(f"Warning: Error processing tool call: {e}")
+                            pass
+                    
+                    except json.JSONDecodeError:
+                        print(f"Warning: Failed to parse chunk: {data}")
+                        continue
+                
+                # Check if we received any content
+                if content_received:
+                    # We got content, process it and break the retry loop
+                    break
+                elif chunk_count == 0:
+                    # No chunks received at all, likely an API error
+                    print(f"{Fore.RED}No response chunks received from API{Style.RESET_ALL}")
+                    retry_count += 1
+                    if retry_count >= max_empty_retries:
+                        raise Exception("Failed to get any response after multiple retries")
+                    continue
+                else:
+                    # Got chunks but no content, might be incomplete response
+                    print(f"{Fore.YELLOW}Got {chunk_count} chunks but no content{Style.RESET_ALL}")
+                    retry_count += 1
+                    if retry_count >= max_empty_retries:
+                        raise Exception("Received empty responses after multiple retries")
+                    continue
+                
+            # Process the end of stream
+            if accumulated_content:
+                # Add the assistant's response to the conversation history if it's not already there
+                content_already_added = False
+                for msg in assistant.messages[-3:]:
+                    if msg.get('role') == 'assistant' and msg.get('content') == accumulated_content:
+                        content_already_added = True
+                        break
+                        
+                if not content_already_added:
+                    assistant.messages.append({"role": "assistant", "content": accumulated_content})
+                
+                # Set the final response
+                assistant._final_response = accumulated_content
+                
+                # Mark that we've streamed the final response
+                assistant._streamed_final_response = True
+                
+                # Send final event
+                yield {"event": "final", "data": accumulated_content}
+                
+                # Call the callback with final response
+                if callback:
+                    callback({"event": "final", "data": accumulated_content})
+            
+            # Process tool calls if they weren't already processed during streaming
+            if accumulated_tool_calls:
+                # Add the tool calls to the message
+                message_with_tool_calls = {
+                    "role": "assistant",
+                    "content": accumulated_content or "",
+                    "tool_calls": accumulated_tool_calls
+                }
+                
+                # Check if we've already added this exact message to avoid duplicates
+                already_added = False
+                for msg in assistant.messages[-3:]:
+                    if (msg.get('role') == 'assistant' and 
+                        msg.get('content') == message_with_tool_calls.get('content') and
+                        'tool_calls' in msg):
+                        already_added = True
+                        break
+                
+                # Only add if not already added
+                if not already_added:
+                    assistant.messages.append(message_with_tool_calls)
+                
+                # Add tool calls to current_tool_calls for processing
+                for tool_call in accumulated_tool_calls:
+                    # Skip already processed tool calls
+                    tool_id = tool_call["id"]
+                    if any(tc["id"] == tool_id for tc in assistant.current_tool_calls):
+                        continue
+                        
+                    assistant.current_tool_calls.append({
+                        "id": tool_call["id"],
+                        "name": tool_call["function"]["name"],
+                        "args": tool_call["function"]["arguments"],
+                        "status": "pending",
+                        "result": None
+                    })
+                    
+                # If we only received tool calls but no content, make sure UI knows we're processing tools
+                if not accumulated_content and callback:
+                    yield {"event": "info", "data": "Processing image using tools...", "temporary": True}
+                    
+        except Exception as e:
+            print(f"{Fore.RED}Pollinations completion error: {str(e)}{Style.RESET_ALL}")
+            traceback.print_exc()
+            yield {"event": "error", "data": f"API error: {str(e)}"}
+
+    def stream(self, callback=None):
+        """
+        Main method to stream the response and process intermediate results.
+        
+        Args:
+            callback: Optional callback to receive stream events
+        
+        Returns:
+            Generator that yields stream events
+        """
+        self.stream_abort = False
+        
+        for event in self._handle_pollinations_streaming(callback):
+            yield event
+
+    def stream_completion(self, callback=None):
+        """Stream the completion response from the API based on provider."""
+        assistant = self.assistant
+        
+        try:
+            # Use Pollinations provider
+            if assistant.provider == 'pollinations':
+                if not assistant.api_client:
+                    raise ValueError("API client not initialized for Pollinations provider")
+                
+                # Stream from Pollinations
+                return self._handle_pollinations_streaming(callback)
+            else:
+                # For backward compatibility, though we should never reach here
+                # as we've set provider to 'pollinations' in Assistant.__init__
+                raise ValueError(f"Unsupported provider: {assistant.provider}")
+                
+        except Exception as e:
+            print(f"Error in stream_completion: {e}")
+            raise

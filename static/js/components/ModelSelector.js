@@ -70,7 +70,7 @@ export class ModelSelector {
                 console.log('Current model set to:', this.currentModel);
             } else {
                 console.log('No model found in settings, using default');
-                this.currentModel = 'gemini/gemini-2.0-flash';
+                this.currentModel = 'openai';
             }
             
             // Update the current model name
@@ -79,11 +79,13 @@ export class ModelSelector {
             // Clear dropdown content
             this.dropdownContent.innerHTML = '';
             
-            // Add only Gemini 2.0 Flash
-            this.addModelOption('gemini/gemini-2.0-flash', 'Gemini 2.0 Flash', 'litellm');
+            // Add Pollinations models
+            this.addModelOption('openai', 'OpenAI', 'pollinations');
+            this.addModelOption('mistral', 'Mistral', 'pollinations');
+            this.addModelOption('openai-large', 'OpenAI Large', 'pollinations');
             
             this.isInitialized = true;
-            console.log('Model selector initialized with Gemini option');
+            console.log('Model selector initialized with Pollinations options');
             
         } catch (error) {
             console.error('Error loading models:', error);
@@ -121,14 +123,20 @@ export class ModelSelector {
     
     updateCurrentModelDisplay() {
         if (!this.currentModel) {
-            this.currentModelName.textContent = 'Gemini 2.0 Flash';
+            this.currentModelName.textContent = 'OpenAI';
             return;
         }
         
         // Directly map the known model values to display names
-        if (this.currentModel === 'gemini/gemini-2.0-flash') {
-            this.currentModelName.textContent = 'Gemini 2.0 Flash';
-            this.currentModelName.title = 'Gemini 2.0 Flash';
+        if (this.currentModel === 'openai') {
+            this.currentModelName.textContent = 'OpenAI';
+            this.currentModelName.title = 'OpenAI';
+        } else if (this.currentModel === 'mistral') {
+            this.currentModelName.textContent = 'Mistral';
+            this.currentModelName.title = 'Mistral';
+        } else if (this.currentModel === 'openai-large') {
+            this.currentModelName.textContent = 'OpenAI Large';
+            this.currentModelName.title = 'OpenAI Large';
         } else {
             // Fallback for any other model value
             const modelName = this.currentModel.split('/').pop() || this.currentModel;

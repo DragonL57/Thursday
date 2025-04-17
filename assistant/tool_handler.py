@@ -6,11 +6,11 @@ import json
 import inspect
 import time
 import random
-import litellm  # Add the missing litellm import
+import traceback
 from colorama import Fore, Style
 from pydantic import BaseModel
 from tools import validate_tool_call, tool_report_print
-from assistant.api_client import preprocess_messages_for_litellm
+from assistant.api_client import preprocess_messages_for_pollinations
 import config as conf  # Add missing import for config
 
 def process_tool_calls(assistant, response_json, print_response=True, validation_retries=2, recursion_depth=0, tool_event_callback=None):
@@ -103,6 +103,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
     # Process each tool call
     has_errors = False
     processed_tool_ids = set()  # Track which tool calls we've processed
+    executed_tools = []  # Track executed tools for the fallback message
     
     # Check if the message had images - especially relevant for multimodal context
     has_image_content = False
@@ -192,7 +193,6 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
             print(f"About to execute tool: {function_name}")
             try:
                 # Signal tool execution start for real-time UI updates
-                from tools.formatting import tool_report_print
                 tool_report_print("Running tool:", f"{function_name}({function_args_str})")
                 
                 # Get function signature
@@ -201,6 +201,7 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
                 # Convert arguments to appropriate types
                 converted_args = function_args.copy()
                 for param_name, param in sig.parameters.items():
+                    # Special handling for pydantic models or other custom types
                     if param_name in converted_args and hasattr(assistant, 'convert_to_pydantic_model'):
                         converted_args[param_name] = assistant.convert_to_pydantic_model(
                             param.annotation, converted_args[param_name]
@@ -212,6 +213,9 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
                 # Signal tool execution completion for real-time UI updates
                 print(f"Tool execution completed: {function_name}")
                 tool_report_print("Result:", str(function_response))
+                
+                # Save for fallback message
+                executed_tools.append((tool_id, function_name, str(function_response)))
                 
                 # Find and update the tool call object with the result
                 for tc in assistant.current_tool_calls:
@@ -236,6 +240,9 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
                 err_msg = f"Error executing tool {function_name}: {tool_execution_error}"
                 print(f"{Fore.RED}{err_msg}{Style.RESET_ALL}")
                 tool_report_print("Result:", f"Error: {str(tool_execution_error)}", is_error=True)
+                
+                # Save for fallback message
+                executed_tools.append((tool_id, function_name, f"Error: {str(tool_execution_error)}"))
                 
                 # Update tool call with error status
                 for tc in assistant.current_tool_calls:
@@ -306,157 +313,67 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
                 tool_content = msg.get('content', '')
                 tool_preview = str(tool_content)[:50] if tool_content is not None else "None" 
                 print(f"    Tool result for call {msg.get('tool_call_id')}: {tool_preview}...")
-
-        # Process messages to ensure proper format for Gemini vision models
-        processed_messages = preprocess_messages_for_litellm(assistant.messages, assistant.model)
         
-        completion_args = {
-            "model": assistant.model,
-            "messages": processed_messages,  # Use processed messages
-            "tools": assistant.tools,
-            "temperature": conf.TEMPERATURE,
-            "top_p": conf.TOP_P,
-            "max_tokens": conf.MAX_TOKENS,
-            "seed": conf.SEED,
-            "tool_choice": "auto",  # This is important to enable tool selection
-            "stream": True  # Always enable streaming for consistent behavior
-        }
-        safety_settings = getattr(conf, 'SAFETY_SETTINGS', None)
-        if safety_settings:
-            completion_args["safety_settings"] = safety_settings
-            
-        completion_args = {k: v for k, v in completion_args.items() if v is not None}
-        
-        print(f"Making follow-up LiteLLM API call with model: {assistant.model}")
-        
-        # Add retry logic for API calls
-        max_retries = 5  # Maximum number of retry attempts
-        base_retry_delay = 1  # Base delay in seconds
-        max_retry_delay = 3  # Maximum retry delay in seconds
-        
-        # Inform the user we're processing the tool results
-        if tool_event_callback and recursion_depth == 0:
-            # Use special message for image-based inputs
-            if has_image_content:
-                for chunk in tool_event_callback("info", "Analyzing image and generating response...", False):
-                    yield chunk
-            else:
-                for chunk in tool_event_callback("info", "Processing results and generating response...", False):
-                    yield chunk
-        
-        # Initialize retry variables
-        retry_count = 0
-        last_error = None
-        
-        while retry_count <= max_retries:
-            try:
-                if retry_count > 0:
-                    # Calculate exponential backoff with jitter
-                    delay = min(base_retry_delay * (2 ** (retry_count - 1)) + (0.1 * random.random()), max_retry_delay)
-                    print(f"{Fore.YELLOW}Retry attempt {retry_count}/{max_retries} after {delay:.2f}s delay{Style.RESET_ALL}")
-                    
-                    # Provide informative message to user via callback
-                    retry_msg = f"The model is currently busy. Retrying... (attempt {retry_count}/{max_retries})"
-                    if tool_event_callback:
-                        for chunk in tool_event_callback("info", retry_msg, True):
-                            yield chunk
-                    
-                    time.sleep(delay)  # Wait before retrying
+        # Create a completion request after tool execution
+        try:
+            # Use the api_client directly instead of litellm
+            if hasattr(assistant, 'api_client'):
+                print("Using API client for follow-up call")
+                response = assistant.api_client.handle_tool_call_followup(
+                    messages=assistant.messages, 
+                    tool_outputs=executed_tools
+                )
                 
-                # Use streaming for recursive calls
-                stream = litellm.completion(**completion_args)
-                print(f"Follow-up API streaming initialized. Processing stream...")
-                
-                # Process the stream here directly to enable real-time streaming
-                accumulated_content = ""
-                accumulated_tool_calls = []
-                final_chunk = None
-                
-                for chunk in stream:
-                    # Process each chunk from the stream
-                    chunk_content = chunk.choices[0].delta.content
-                    chunk_tool_calls = chunk.choices[0].delta.tool_calls
-                    
-                    if chunk_content:
-                        accumulated_content += chunk_content
-                        # Stream token in real-time
-                        if tool_event_callback:
-                            for event in tool_event_callback("token", chunk_content):
-                                yield event
-                    
-                    if chunk_tool_calls:
-                        # Process tool calls from the stream (similar to chat_routes.py)
-                        for tool_call_delta in chunk_tool_calls:
-                            index = tool_call_delta.index
-                            if index >= len(accumulated_tool_calls):
-                                # New tool call started
-                                accumulated_tool_calls.append({
-                                    "id": tool_call_delta.id or f"tool_{index}",
-                                    "type": "function",
-                                    "function": {
-                                        "name": tool_call_delta.function.name or "",
-                                        "arguments": tool_call_delta.function.arguments or ""
-                                    }
-                                })
-                            else:
-                                # Append to existing tool call
-                                if tool_call_delta.function.name:
-                                    accumulated_tool_calls[index]["function"]["name"] += tool_call_delta.function.name
-                                if tool_call_delta.function.arguments:
-                                    accumulated_tool_calls[index]["function"]["arguments"] += tool_call_delta.function.arguments
-                    
-                    final_chunk = chunk  # Keep track of the last chunk
-                
-                # Create the next_response object from accumulated data
+                # Create similar response structure to what would be expected
                 next_response = {
                     "choices": [{
                         "message": {
-                            "role": "assistant",
-                            "content": accumulated_content,
-                            **({"tool_calls": accumulated_tool_calls} if accumulated_tool_calls else {})
+                            "role": "assistant", 
+                            "content": response.get('choices', [{}])[0].get('message', {}).get('content', '')
                         },
-                        "finish_reason": final_chunk.choices[0].finish_reason if final_chunk else "stop"
+                        "finish_reason": "stop" 
                     }],
                     "model": assistant.model
                 }
                 
-                # Successful call, break out of retry loop
-                break
+            else:
+                # Use old method as fallback
+                print("API client not available, falling back to default")
+                raise Exception("API client not available")
                 
-            except Exception as e:
-                last_error = e
-                retry_count += 1
+        except Exception as e:
+            print(f"Error in API client follow-up call: {e}. Using fallback.")
+            
+            # Simple fallback message if we can't get a proper follow-up response
+            fallback = "I processed your request and received the following results from the tools:"
+            
+            # Include results from tools in the fallback message
+            for tool_id, function_name, result in executed_tools:
+                fallback += f"\n\n**{function_name}**: {result}"
                 
-                # Check if this is a retryable error (503, overloaded model, etc.)
-                is_retryable = False
-                error_str = str(e).lower()
-                
-                if "503" in error_str or "service unavailable" in error_str or "overloaded" in error_str:
-                    is_retryable = True
-                    print(f"{Fore.YELLOW}Retryable error detected: {e}{Style.RESET_ALL}")
-                elif "429" in error_str or "rate limit" in error_str or "too many requests" in error_str:
-                    is_retryable = True
-                    print(f"{Fore.YELLOW}Rate limit error detected: {e}{Style.RESET_ALL}")
-                elif "timeout" in error_str or "connection" in error_str or "network" in error_str:
-                    is_retryable = True
-                    print(f"{Fore.YELLOW}Network error detected: {e}{Style.RESET_ALL}")
-                
-                if not is_retryable or retry_count > max_retries:
-                    print(f"{Fore.RED}Error during follow-up LiteLLM API call (not retrying): {e}{Style.RESET_ALL}")
-                    raise
-                
-                print(f"{Fore.YELLOW}Error during follow-up LiteLLM API call (will retry): {e}{Style.RESET_ALL}")
-        
-        # If we've exhausted all retries without success
-        if 'next_response' not in locals():
-            raise Exception(f"API call failed after {max_retries} retries. Last error: {last_error}")
+            # Create a simple response object
+            next_response = {
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": fallback
+                    },
+                    "finish_reason": "stop"
+                }],
+                "model": assistant.model
+            }
+            
+            # Stream the fallback tokens if we have a callback
+            if tool_event_callback:
+                for chunk in tool_event_callback("token", fallback):
+                    yield chunk
         
         # Process the new response recursively, incrementing the recursion depth
         next_generator = process_tool_calls(
             assistant,
             next_response, 
             print_response=print_response, 
-            validation_retries=2,
+            validation_retries=validation_retries,
             recursion_depth=recursion_depth+1,
             tool_event_callback=tool_event_callback
         )
@@ -473,11 +390,8 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
         if final_text is not None:
             yield {"final_text": final_text}
             
-        # No need to yield token events here as they're already streamed in real-time above
-            
     except Exception as e:
         print(f"{Fore.RED}Error in recursive tool call: {e}. Returning partial results.{Style.RESET_ALL}")
-        import traceback
         traceback.print_exc()
         # Return partial results if we encounter an error in the recursive call
         fallback = "Error processing follow-up response. Here's what I know so far."
@@ -488,49 +402,40 @@ def process_tool_calls(assistant, response_json, print_response=True, validation
             for chunk in tool_event_callback("token", fallback):
                 yield chunk
 
-def convert_to_pydantic_model(annotation, arg_value):
-    """
-    Attempts to convert a value to a Pydantic model.
-    
-    Args:
-        annotation: Type annotation
-        arg_value: Value to convert
-        
-    Returns:
-        Converted value
-    """
-    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-        try:
-            return annotation(**arg_value)
-        except (TypeError, ValueError):
-            return arg_value
-    elif hasattr(annotation, "__origin__"):
-        origin = annotation.__origin__
-        args = annotation.__args__
 
-        if origin is list:
-            return [
-                convert_to_pydantic_model(args[0], item) for item in arg_value
-            ]
-        elif origin is dict:
-            return {
-                key: convert_to_pydantic_model(args[1], value)
-                for key, value in arg_value.items()
-            }
-        elif origin is Union:
-            for arg_type in args:
-                try:
-                    return convert_to_pydantic_model(arg_type, arg_value)
-                except (ValueError, TypeError):
-                    continue
-            raise ValueError(f"Could not convert {arg_value} to any type in {args}")
-        elif origin is tuple:
-            return tuple(
-                convert_to_pydantic_model(args[i], arg_value[i])
-                for i in range(len(args))
-            )
-        elif origin is set:
-            return {
-                convert_to_pydantic_model(args[0], item) for item in arg_value
-            }
+def convert_to_pydantic_model(annotation, arg_value):
+    """Convert a value to a Pydantic model if the annotation is a Pydantic model class."""
+    if isinstance(arg_value, dict) and hasattr(annotation, "__name__") and annotation.__name__.endswith("Model"):
+        return annotation(**arg_value)
     return arg_value
+
+
+# Add compatibility wrapper to handle class method style call
+class ToolHandler:
+    def __init__(self, assistant=None):
+        self.assistant = assistant
+    
+    def process_tool_calls(self, tool_calls, **kwargs):
+        """Process a list of tool calls and execute them - compatibility wrapper."""
+        if not self.assistant:
+            raise ValueError("Assistant must be provided to process tool calls")
+            
+        # Create a simple response structure to pass to the main function
+        response_json = {
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": tool_calls
+                }
+            }]
+        }
+        
+        # Call the module-level function with appropriate parameters
+        return process_tool_calls(
+            self.assistant, 
+            response_json,
+            print_response=kwargs.get('print_response', True),
+            validation_retries=kwargs.get('validation_retries', 2),
+            recursion_depth=kwargs.get('recursion_depth', 0),
+            tool_event_callback=kwargs.get('tool_event_callback', None)
+        )

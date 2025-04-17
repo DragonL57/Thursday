@@ -15,7 +15,7 @@ from rich.markdown import Markdown
 from pydantic import BaseModel
 
 import config as conf
-from .api_client import preprocess_messages_for_litellm
+from .api_client import preprocess_messages_for_pollinations
 from .image_processor import optimize_images, process_image_for_gemini
 from .streaming import StreamHandler
 from .tool_handler import process_tool_calls, convert_to_pydantic_model
@@ -23,6 +23,9 @@ from .utils import cmd
 
 # Import provider manager for integrated models
 from utils.provider_manager import ProviderManager
+
+# Add the missing import for ApiClient
+from .api_client import ApiClient
 
 class Assistant:
     """
@@ -87,20 +90,15 @@ class Assistant:
 
         # Initialize provider manager
         ProviderManager.initialize()
-        # All models use LiteLLM now
-        self.provider = 'litellm'
         
-        # Normalize the model name with Gemini
-        if model.lower() in ['gemini', 'gemini-2.0-flash']:
-            self.model = 'gemini/gemini-2.0-flash'
-        elif not '/' in model:
-            # Add gemini/ prefix if no provider specified
-            self.model = f"gemini/{model}" 
-        else:
-            self.model = model
+        # Set provider to pollinations - no longer using litellm
+        self.provider = 'pollinations'
         
-        # No client needed
-        self.api_client = None
+        # Normalize the model name for Pollinations
+        self.model = model
+        
+        # Initialize the API client for Pollinations
+        self.api_client = ApiClient(model=self.model)
         
         # Initialize streaming handler (always enable for consistency)
         self.stream_handler = StreamHandler(self) if stream_handler else None
@@ -165,16 +163,11 @@ class Assistant:
         """Process the message and execute tools."""
         try:
             # Get completion based on provider
-            if self.provider == 'litellm':                
-                response = litellm.completion(
-                    model=self.model,
-                    messages=self.messages,
-                    tools=self.tools,
-                    temperature=conf.TEMPERATURE,
-                    top_p=conf.TOP_P,
-                    max_tokens=conf.MAX_TOKENS,
-                    seed=conf.SEED,
-                    safety_settings=conf.SAFETY_SETTINGS
+            if self.provider == 'pollinations':                
+                # Replace litellm references
+                response = self.api_client.get_completion(
+                    preprocess_messages_for_pollinations(self.messages, self.model),
+                    tools=self.tools
                 )
             else:
                 raise ValueError(f"Unsupported provider: {self.provider}")

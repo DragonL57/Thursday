@@ -82,7 +82,7 @@ export class SettingsManager {
                 } else {
                     console.warn(`Model ${settings.model} not found in select options`);
                     // Set to default if the option doesn't exist
-                    this.modelSelect.value = 'github/gpt-4o';
+                    this.modelSelect.value = 'openai';
                 }
             }
             
@@ -107,8 +107,8 @@ export class SettingsManager {
         } catch (error) {
             console.error('Error fetching settings:', error);
             return {
-                provider: 'litellm',
-                model: 'github/gpt-4o',
+                provider: 'pollinations',
+                model: 'openai',
                 temperature: 1,
                 max_tokens: 8192,
                 save_history: true
@@ -120,7 +120,7 @@ export class SettingsManager {
         try {
             // Only update necessary fields
             const update = {
-                provider: 'litellm', // Always set to litellm
+                provider: 'pollinations', // Always set to pollinations
                 model: settings.model
             };
             
@@ -166,7 +166,7 @@ export class SettingsManager {
         }
 
         const settings = {
-            provider: 'litellm', // Always set to litellm
+            provider: 'pollinations', // Always set to pollinations
             model: this.modelSelect.value,
             temperature: parseFloat(this.temperatureSlider.value),
             max_tokens: parseInt(this.maxTokensInput.value),

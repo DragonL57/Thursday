@@ -9,11 +9,11 @@ class ProviderManager:
     Manages providers and their models to ensure consistent naming and behavior
     """
     # Provider constants
-    LITELLM = 'litellm'
+    POLLINATIONS = 'pollinations'
     
     # Model mappings for standardization - only keep mappings for the supported model
     MODEL_MAPPING = {
-        'gemini': 'gemini/gemini-2.0-flash'
+        'gemini': 'openai'  # Map gemini references to openai model in Pollinations
     }
     
     # Track initialization
@@ -61,16 +61,16 @@ class ProviderManager:
         
         # Map directly to our supported model
         if model_family in ['gemini', 'gemini-2.0-flash']:
-            return cls.LITELLM, 'gemini/gemini-2.0-flash'
+            return cls.POLLINATIONS, 'gemini/gemini-2.0-flash'
         
         # If the model already includes the provider format, use it directly
         if '/' in model_family and model_family.startswith('gemini/'):
-            return cls.LITELLM, model_family
+            return cls.POLLINATIONS, model_family
         
         # Default to Gemini
-        return cls.LITELLM, 'gemini/gemini-2.0-flash'
+        return cls.POLLINATIONS, 'gemini/gemini-2.0-flash'
     
     @classmethod
     def should_use_primary(cls, model_family):
-        """Always returns False as we only use LiteLLM now"""
+        """Always returns False as we only use Pollinations now"""
         return False
