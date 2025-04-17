@@ -258,10 +258,12 @@ class StreamHandler:
                 # Add a synthetic message if needed
                 if not any(msg.get("role") == "assistant" and msg.get("content") for msg in self.assistant.messages[-3:]):
                     print(f"DEBUG: Adding synthetic assistant message to history")
-                    self.assistant.messages.append({
+                    # Create a message object WITHOUT an empty tool_calls field
+                    assistant_message = {
                         "role": "assistant", 
                         "content": fallback_response
-                    })
+                    }
+                    self.assistant.messages.append(assistant_message)
                 
                 # Send this as a token for the client to display
                 if callback:
@@ -643,8 +645,11 @@ class StreamHandler:
                 message_with_tool_calls = {
                     "role": "assistant",
                     "content": accumulated_content or "",
-                    "tool_calls": accumulated_tool_calls
                 }
+                
+                # Only add tool_calls field if the array is not empty
+                if accumulated_tool_calls:
+                    message_with_tool_calls["tool_calls"] = accumulated_tool_calls
                 
                 # Check if we've already added this exact message to avoid duplicates
                 already_added = False
@@ -919,8 +924,11 @@ class StreamHandler:
                 message_with_tool_calls = {
                     "role": "assistant",
                     "content": accumulated_content or "",
-                    "tool_calls": accumulated_tool_calls
                 }
+                
+                # Only add tool_calls field if the array is not empty
+                if accumulated_tool_calls:
+                    message_with_tool_calls["tool_calls"] = accumulated_tool_calls
                 
                 # Check if we've already added this exact message to avoid duplicates
                 already_added = False
