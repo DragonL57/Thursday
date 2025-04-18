@@ -216,7 +216,16 @@ export class ToolCallHandler {
         container.className = 'tool-container new-tool'; // Add new-tool class for animation
         container.id = `tool-${toolCall.id}`;
         container.setAttribute('data-status', 'pending');
-        
+
+        // If an explanation was provided for this tool call, display it before the header
+        if (toolCall.explanation) {
+            const explanationEl = document.createElement('div');
+            explanationEl.className = 'tool-call-explanation';
+            explanationEl.textContent = toolCall.explanation;
+            explanationEl.setAttribute('data-no-copy', 'true');
+            container.appendChild(explanationEl);
+        }
+
         // Add click event to toggle collapse state for this specific tool
         container.addEventListener('click', (e) => {
             // Don't handle clicks on interactive elements inside the container
