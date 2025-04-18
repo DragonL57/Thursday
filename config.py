@@ -21,14 +21,15 @@ from prompts import (
 
 # --- Provider Configuration ---
 API_PROVIDER = 'litellm'  # Set default API provider to litellm
-DEFAULT_MODEL = 'gemini/gemini-2.0-flash'
+DEFAULT_MODEL = 'gemini/gemini-2.5-flash-preview-04-17'
 AVAILABLE_MODELS = [
-    'gemini/gemini-2.0-flash'
+    'gemini/gemini-2.0-flash',
+    'gemini/gemini-2.5-flash-preview-04-17'
 ]
 
 # --- Model Configuration ---
 # For LiteLLM provider, use provider/model format
-MODEL = "gemini/gemini-2.0-flash"  # Default model
+MODEL = "gemini/gemini-2.5-flash-preview-04-17"  # Default model
 
 # --- Provider-specific Documentation ---
 # LiteLLM models (always in provider/model format):
@@ -41,7 +42,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # For gemini/... models via Google 
 # --- Model Parameters ---
 TEMPERATURE = 1
 TOP_P = None
-MAX_TOKENS = 8192
+MAX_TOKENS = 65000
 SEED = None
 
 # --- Script parameters ---

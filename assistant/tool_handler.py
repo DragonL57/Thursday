@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from tools import validate_tool_call, tool_report_print
 from assistant.api_client import preprocess_messages_for_litellm
 import config as conf  # Add missing import for config
+from typing import Union 
 
 def process_tool_calls(assistant, response_json, print_response=True, validation_retries=2, recursion_depth=0, tool_event_callback=None):
     """
